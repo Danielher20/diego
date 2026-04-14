@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SiGA - Sistema Integral de Gestión Académica</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Outfit:wght@400;500;600;700&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/siga.css">
+</head>
+<body>
+  <section id="login-view" class="login">
+    <div class="login-media">
+      <img src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1200&q=80" alt="Campus universitario">
+      <div class="login-brand">
+        <div class="mark">SiGA</div>
+        <h1>Gestión académica clara, segura y centralizada.</h1>
+        <p>Actas, notas y auditoría en una sola herramienta local.</p>
+      </div>
+    </div>
+    <form id="login-form" class="login-panel">
+      <p class="eyebrow">Sistema Integral de Gestión Académica</p>
+      <h2>Iniciar sesión</h2>
+      <label>Usuario
+        <input id="login-user" autocomplete="username" placeholder="admin o docente" required>
+      </label>
+      <label>Contraseña
+        <input id="login-pass" type="password" autocomplete="current-password" placeholder="1234" required>
+      </label>
+      <button class="btn primary" type="submit">Entrar</button>
+      <p id="login-error" class="error-line"></p>
+      <p class="hint">Usuarios semilla: <strong>admin/1234</strong> y <strong>docente/1234</strong>.</p>
+    </form>
+  </section>
+
+  <section id="app-view" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand-row">
+        <span class="brand-symbol">S</span>
+        <div><strong>SiGA</strong><small>v1.0 local</small></div>
+      </div>
+      <nav id="admin-nav" class="nav hidden">
+        <button data-page="admin-dashboard" class="active">Dashboard</button>
+        <button data-page="admin-docentes">Docentes</button>
+        <button data-page="admin-materias">Materias</button>
+        <button data-page="admin-actas">Actas</button>
+        <button data-page="admin-logs">Auditoría</button>
+      </nav>
+      <nav id="docente-nav" class="nav hidden">
+        <button data-page="doc-dashboard" class="active">Mis materias</button>
+        <button data-page="doc-alumnos">Alumnos</button>
+        <button data-page="doc-plan">Plan</button>
+        <button data-page="doc-notas">Notas</button>
+        <button data-page="doc-acta">Acta</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="session-name" class="session-name">Usuario</div>
+        <div id="session-role" class="session-role">Rol</div>
+        <button id="logout-btn" class="btn ghost full">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="top-eyebrow">Panel</p>
+          <h2 id="page-title">Dashboard</h2>
+        </div>
+        <button id="refresh-btn" class="btn ghost">Actualizar</button>
+      </header>
+
+      <section id="page-admin-dashboard" class="page active">
+        <div class="stats-grid">
+          <article class="stat"><span>Docentes activos</span><strong id="stat-docentes">0</strong></article>
+          <article class="stat"><span>Materias activas</span><strong id="stat-materias">0</strong></article>
+          <article class="stat"><span>Alumnos registrados</span><strong id="stat-alumnos">0</strong></article>
+          <article class="stat"><span>Aprobados / Reprobados</span><strong id="stat-rendimiento">0 / 0</strong></article>
+        </div>
+      </section>
+
+      <section id="page-admin-docentes" class="page">
+        <div class="toolbar">
+          <h3>Gestión de docentes</h3>
+          <button class="btn primary" data-open="docente-dialog">Nuevo docente</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cédula</th><th>Docente</th><th>Usuario</th><th>Materias</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="admin-docentes-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="page-admin-materias" class="page">
+        <div class="toolbar">
+          <h3>Unidades curriculares</h3>
+          <button class="btn primary" data-open="materia-dialog">Nueva materia</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th>Materia</th><th>Período</th><th>Docente</th><th>Acta</th><th>Asignar</th></tr></thead>
+            <tbody id="admin-materias-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="page-admin-actas" class="page">
+        <div class="toolbar"><h3>Supervisión de actas</h3><select id="admin-acta-materia"></select></div>
+        <div id="admin-acta" class="acta"></div>
+      </section>
+
+      <section id="page-admin-logs" class="page">
+        <div class="toolbar"><h3>Log de auditoría</h3></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead><tbody id="logs-body"></tbody></table>
+        </div>
+      </section>
+
+      <section id="page-doc-dashboard" class="page">
+        <div class="toolbar"><h3>Materias asignadas</h3><select id="doc-materia-select"></select></div>
+        <div id="doc-materia-cards" class="cards-grid"></div>
+      </section>
+
+      <section id="page-doc-alumnos" class="page">
+        <div class="toolbar"><h3>Alumnos de la sección</h3><button class="btn primary" data-open="alumno-dialog">Registrar alumno</button></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Cédula</th><th>Alumno</th><th>Estado</th><th></th></tr></thead><tbody id="alumnos-body"></tbody></table>
+        </div>
+      </section>
+
+      <section id="page-doc-plan" class="page">
+        <div class="toolbar">
+          <h3>Plan de evaluación</h3>
+          <div class="toolbar-actions"><span id="plan-status" class="pill warn">0%</span><button id="add-eval-btn" class="btn ghost">Agregar</button><button id="save-plan-btn" class="btn primary">Guardar plan</button></div>
+        </div>
+        <div class="progress"><span id="plan-bar"></span></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Evaluación</th><th>Tipo</th><th>Ponderación %</th><th></th></tr></thead><tbody id="plan-body"></tbody></table>
+        </div>
+      </section>
+
+      <section id="page-doc-notas" class="page">
+        <div class="toolbar"><h3>Carga de calificaciones</h3><select id="eval-select"></select></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Cédula</th><th>Alumno</th><th>Nota</th><th>Estado</th></tr></thead><tbody id="notas-body"></tbody></table>
+        </div>
+        <button id="save-notas-btn" class="btn primary">Guardar calificaciones</button>
+      </section>
+
+      <section id="page-doc-acta" class="page">
+        <div class="toolbar">
+          <h3>Acta final</h3>
+          <div class="toolbar-actions"><button id="csv-btn" class="btn ghost">CSV</button><button id="print-btn" class="btn ghost">Imprimir</button><button id="mark-acta-btn" class="btn primary">Generar acta</button></div>
+        </div>
+        <div id="doc-acta" class="acta"></div>
+      </section>
+    </main>
+  </section>
+
+  <dialog id="docente-dialog"><form class="dialog-card" id="docente-form"><h3>Nuevo docente</h3><input name="cedula" placeholder="Cédula" required><input name="nombres" placeholder="Nombres" required><input name="apellidos" placeholder="Apellidos" required><input name="email" type="email" placeholder="Email" required><div class="dialog-actions"><button class="btn ghost" type="button" onclick="this.closest('dialog').close()">Cancelar</button><button class="btn primary" type="submit">Crear</button></div></form></dialog>
+  <dialog id="materia-dialog"><form class="dialog-card" id="materia-form"><h3>Nueva materia</h3><input name="codigo" placeholder="Código: MAT-101" required><input name="nombre" placeholder="Nombre de la materia" required><input name="periodo" placeholder="Período: 2026-I" required><select name="docente_id" id="materia-docente-select"></select><div class="dialog-actions"><button class="btn ghost" type="button" onclick="this.closest('dialog').close()">Cancelar</button><button class="btn primary" type="submit">Crear</button></div></form></dialog>
+  <dialog id="alumno-dialog"><form class="dialog-card" id="alumno-form"><h3>Registrar alumno</h3><input name="cedula" placeholder="Cédula" required><input name="nombres" placeholder="Nombres" required><input name="apellidos" placeholder="Apellidos" required><div class="dialog-actions"><button class="btn ghost" type="button" onclick="this.closest('dialog').close()">Cancelar</button><button class="btn primary" type="submit">Registrar</button></div></form></dialog>
+
+  <div id="toast" class="toast"></div>
+  <script src="/js/siga.js"></script>
+</body>
+</html>
