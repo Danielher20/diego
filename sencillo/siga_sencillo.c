@@ -11,12 +11,14 @@
 #define MAX_MATERIAS 40
 #define MAX_ALUMNOS 400
 #define MAX_EVALS 5
+#define MAX_SECCIONES 60
 
 #define ARCHIVO_DATOS "siga_sencillo.dat"
-#define ARCHIVO_MAGIC "SIGA3"
+#define ARCHIVO_MAGIC "SIGA4"
 #define CARPETA_IMPRESIONES "impresiones"
-#define NOTA_MAXIMA 100.0f
-#define NOTA_APROBATORIA 50.0f
+#define NOTA_MINIMA 1.0f
+#define NOTA_MAXIMA 20.0f
+#define NOTA_APROBATORIA 10.0f
 
 #define ANCHO_PANTALLA 120
 #define ALTO_PANTALLA 30
@@ -55,6 +57,14 @@ typedef struct {
 
 typedef struct {
     int id;
+    int docenteId;
+    int materiaId;
+    char nombre[30];
+    int activo;
+} Seccion;
+
+typedef struct {
+    int id;
     char cedula[20];
     char nombres[50];
     char apellidos[50];
@@ -66,11 +76,14 @@ typedef struct {
 
 Docente docentes[MAX_DOCENTES];
 Materia materias[MAX_MATERIAS];
+Seccion secciones[MAX_SECCIONES];
 Alumno alumnos[MAX_ALUMNOS];
 int totalDocentes = 0;
 int totalMaterias = 0;
+int totalSecciones = 0;
 int totalAlumnos = 0;
 int docenteActual = -1;
+int seccionActual = -1;
 
 void configurarConsola(void);
 void establecerFondo(void);
@@ -103,18 +116,23 @@ void guardarDatos(void);
 void colocarPlanDefecto(Materia *materia);
 int siguienteIdDocente(void);
 int siguienteIdMateria(void);
+int siguienteIdSeccion(void);
 int siguienteIdAlumno(void);
 int validarCedula(const char *cedula);
 int validarNombre(const char *nombre);
 int buscarDocentePorId(int id);
 int buscarDocentePorUsuario(const char *usuario);
 int buscarMateriaPorId(int id);
+int buscarSeccionPorId(int id);
 int buscarAlumnoPorCedulaMateria(const char *cedula, int materiaId);
 int contarMateriasDocente(int docenteId);
+int contarSeccionesDocente(int docenteId);
 int contarAlumnosMateria(int materiaId);
 float calcularDefinitivaAlumno(const Alumno *alumno, const Materia *materia, int *completo);
 const char *condicionAlumno(const Alumno *alumno, const Materia *materia);
 void nombreDocente(int docenteId, char salida[120]);
+int leerCampoRequerido(const char *etiqueta, char *salida, int tamano, int xLabel, int y, int xInput, int (*validador)(const char *), const char *mensajeError);
+int leerCedulaRequerida(char *salida, int tamano, int xLabel, int y, int xInput);
 
 int loginUsuario(void);
 void menuPrincipal(void);
@@ -125,11 +143,16 @@ void menuGestionAcademico(void);
 void usuarioCrearCuenta(void);
 int elegirMateriaDelDocente(void);
 int elegirEvaluacionMateria(int posMateria);
+void usuarioCrearSeccion(void);
+void usuarioCambiarSeccion(void);
+int seleccionarAlumnoMateria(int materiaId, const char *titulo, int incluirRetirados);
 void docenteRegistrarAlumno(void);
 void docenteListarAlumnos(void);
 void docenteEditarAlumno(void);
-void docenteRetirarAlumno(void);
 void docentePlanEvaluacion(void);
+void planVerActual(int posMateria);
+void planEditar(int posMateria);
+void planBorrar(int posMateria);
 void docenteVerNotas(void);
 void docenteCargarNotas(void);
 void docenteGenerarActa(void);
@@ -137,9 +160,9 @@ void docenteImprimirActa(void);
 void docenteImprimirBoleta(void);
 void verActaMateria(int materiaId, int modoAdmin);
 int prepararCarpetaImpresiones(void);
-int generarArchivoActa(int materiaId, char ruta[MAX_PATH]);
-int generarArchivoBoleta(int materiaId, int posAlumno, char ruta[MAX_PATH]);
-int imprimirArchivoTexto(const char *ruta);
+int generarPdfActa(int materiaId, char ruta[MAX_PATH]);
+int generarPdfBoleta(int materiaId, int posAlumno, char ruta[MAX_PATH]);
+int imprimirArchivo(const char *ruta);
 
 void configurarConsola(void) {
     char comando[60];
@@ -420,17 +443,9 @@ void pantallaBase(const char *titulo) {
 }
 
 void colocarPlanDefecto(Materia *materia) {
-    strcpy(materia->evalNombres[0], "Parcial 1");
-    strcpy(materia->evalNombres[1], "Taller");
-    strcpy(materia->evalNombres[2], "Proyecto");
-    strcpy(materia->evalTipos[0], "Examen");
-    strcpy(materia->evalTipos[1], "Practica");
-    strcpy(materia->evalTipos[2], "Proyecto");
-    materia->ponderaciones[0] = 40.0f;
-    materia->ponderaciones[1] = 30.0f;
-    materia->ponderaciones[2] = 30.0f;
-    materia->totalEvaluaciones = 3;
-    for (int i = 3; i < MAX_EVALS; i++) {
+    int i;
+    materia->totalEvaluaciones = 0;
+    for (i = 0; i < MAX_EVALS; i++) {
         materia->evalNombres[i][0] = '\0';
         materia->evalTipos[i][0] = '\0';
         materia->ponderaciones[i] = 0.0f;
@@ -456,13 +471,16 @@ void cargarDatos(void) {
 
     fread(&totalDocentes, sizeof(int), 1, archivo);
     fread(&totalMaterias, sizeof(int), 1, archivo);
+    fread(&totalSecciones, sizeof(int), 1, archivo);
     fread(&totalAlumnos, sizeof(int), 1, archivo);
 
     if (totalDocentes < 0 || totalDocentes > MAX_DOCENTES ||
         totalMaterias < 0 || totalMaterias > MAX_MATERIAS ||
+        totalSecciones < 0 || totalSecciones > MAX_SECCIONES ||
         totalAlumnos < 0 || totalAlumnos > MAX_ALUMNOS) {
         totalDocentes = 0;
         totalMaterias = 0;
+        totalSecciones = 0;
         totalAlumnos = 0;
         fclose(archivo);
         return;
@@ -470,6 +488,7 @@ void cargarDatos(void) {
 
     fread(docentes, sizeof(Docente), totalDocentes, archivo);
     fread(materias, sizeof(Materia), totalMaterias, archivo);
+    fread(secciones, sizeof(Seccion), totalSecciones, archivo);
     fread(alumnos, sizeof(Alumno), totalAlumnos, archivo);
     fclose(archivo);
 }
@@ -487,9 +506,11 @@ void guardarDatos(void) {
     fwrite(magic, sizeof(magic), 1, archivo);
     fwrite(&totalDocentes, sizeof(int), 1, archivo);
     fwrite(&totalMaterias, sizeof(int), 1, archivo);
+    fwrite(&totalSecciones, sizeof(int), 1, archivo);
     fwrite(&totalAlumnos, sizeof(int), 1, archivo);
     fwrite(docentes, sizeof(Docente), totalDocentes, archivo);
     fwrite(materias, sizeof(Materia), totalMaterias, archivo);
+    fwrite(secciones, sizeof(Seccion), totalSecciones, archivo);
     fwrite(alumnos, sizeof(Alumno), totalAlumnos, archivo);
     fclose(archivo);
 }
@@ -506,6 +527,14 @@ int siguienteIdMateria(void) {
     int i, mayor = 0;
     for (i = 0; i < totalMaterias; i++) {
         if (materias[i].id > mayor) mayor = materias[i].id;
+    }
+    return mayor + 1;
+}
+
+int siguienteIdSeccion(void) {
+    int i, mayor = 0;
+    for (i = 0; i < totalSecciones; i++) {
+        if (secciones[i].id > mayor) mayor = secciones[i].id;
     }
     return mayor + 1;
 }
@@ -561,6 +590,14 @@ int buscarMateriaPorId(int id) {
     return -1;
 }
 
+int buscarSeccionPorId(int id) {
+    int i;
+    for (i = 0; i < totalSecciones; i++) {
+        if (secciones[i].id == id) return i;
+    }
+    return -1;
+}
+
 int buscarAlumnoPorCedulaMateria(const char *cedula, int materiaId) {
     int i;
     for (i = 0; i < totalAlumnos; i++) {
@@ -573,6 +610,14 @@ int contarMateriasDocente(int docenteId) {
     int i, total = 0;
     for (i = 0; i < totalMaterias; i++) {
         if (materias[i].docenteId == docenteId) total++;
+    }
+    return total;
+}
+
+int contarSeccionesDocente(int docenteId) {
+    int i, total = 0;
+    for (i = 0; i < totalSecciones; i++) {
+        if (secciones[i].docenteId == docenteId && secciones[i].activo) total++;
     }
     return total;
 }
@@ -592,7 +637,8 @@ float calcularDefinitivaAlumno(const Alumno *alumno, const Materia *materia, int
     *completo = 1;
 
     if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) {
-        totalEvaluaciones = 3;
+        *completo = 0;
+        return 0.0f;
     }
 
     if (alumno->retirado) {
@@ -630,6 +676,32 @@ void nombreDocente(int docenteId, char salida[120]) {
     snprintf(salida, 120, "%s %s", docentes[pos].nombres, docentes[pos].apellidos);
 }
 
+int leerCampoRequerido(const char *etiqueta, char *salida, int tamano, int xLabel, int y, int xInput, int (*validador)(const char *), const char *mensajeError) {
+    while (1) {
+        limpiarArea(xLabel, y, 78, 1);
+        gotoxy(xLabel, y);
+        printf("%s (0 volver): ", etiqueta);
+        leerTexto(salida, tamano, xInput, y);
+
+        if (strcmp(salida, "0") == 0) return 0;
+        if (strlen(salida) == 0) {
+            mostrarError("El campo no puede quedar vacio.", 26);
+            pausa();
+            continue;
+        }
+        if (validador != NULL && !validador(salida)) {
+            mostrarError(mensajeError, 26);
+            pausa();
+            continue;
+        }
+        return 1;
+    }
+}
+
+int leerCedulaRequerida(char *salida, int tamano, int xLabel, int y, int xInput) {
+    return leerCampoRequerido("Cedula", salida, tamano, xLabel, y, xInput, validarCedula, "Cedula invalida. Use solo numeros y minimo 6 digitos.");
+}
+
 int loginUsuario(void) {
     char usuario[30], clave[30];
     int pos;
@@ -646,6 +718,7 @@ int loginUsuario(void) {
     pos = buscarDocentePorUsuario(usuario);
     if (pos >= 0 && docentes[pos].activo && strcmp(docentes[pos].clave, clave) == 0) {
         docenteActual = pos;
+        seccionActual = -1;
         mostrarBarraCarga("Entrando al panel de usuario...");
         return 1;
     }
@@ -693,38 +766,49 @@ void menuUsuario(void) {
     const char *opciones[] = {
         "Gestion de alumnos",
         "Gestion academico",
+        "Crear seccion",
+        "Cambiar seccion",
         "Guardar datos",
         "Cerrar sesion"
     };
     char titulo[140];
     char materiaNombre[70] = "Sin materia";
+    char seccionNombre[40] = "Sin seccion";
     int i;
     int opcion;
 
     while (1) {
+        strcpy(materiaNombre, "Sin materia");
+        strcpy(seccionNombre, "Sin seccion");
         for (i = 0; i < totalMaterias; i++) {
-            if (materias[i].docenteId == docentes[docenteActual].id) {
+            if (seccionActual >= 0 && materias[i].id == secciones[seccionActual].materiaId) {
                 strcpy(materiaNombre, materias[i].nombre);
                 break;
             }
+        }
+        if (seccionActual >= 0) {
+            strcpy(seccionNombre, secciones[seccionActual].nombre);
         }
 
         snprintf(titulo, sizeof(titulo), "PANEL DE USUARIO - %s %s", docentes[docenteActual].nombres, docentes[docenteActual].apellidos);
         pantallaBase(titulo);
         gotoxy(8, 7);
-        printf("Materia: %s", materiaNombre);
-        dibujarCuadro(31, 9, 58, 12);
-        opcion = menuFlechas(opciones, 4, 36, 11, 48);
+        printf("Seccion activa: %s | Materia: %s", seccionNombre, materiaNombre);
+        dibujarCuadro(31, 8, 58, 18);
+        opcion = menuFlechas(opciones, 6, 36, 10, 48);
 
         if (opcion == 0) menuGestionAlumnos();
         else if (opcion == 1) menuGestionAcademico();
-        else if (opcion == 2) {
+        else if (opcion == 2) usuarioCrearSeccion();
+        else if (opcion == 3) usuarioCambiarSeccion();
+        else if (opcion == 4) {
             guardarDatos();
             mostrarExito("Datos guardados correctamente.", 25);
             pausa();
         } else {
             guardarDatos();
             docenteActual = -1;
+            seccionActual = -1;
             break;
         }
     }
@@ -734,21 +818,19 @@ void menuGestionAlumnos(void) {
     const char *opciones[] = {
         "Registrar alumno",
         "Listado de alumnos",
-        "Editar datos de alumno",
-        "Retirar alumno",
+        "Editar o retirar alumno",
         "Volver"
     };
     int opcion;
 
     while (1) {
         pantallaBase("GESTION DE ALUMNOS");
-        dibujarCuadro(29, 9, 62, 14);
-        opcion = menuFlechas(opciones, 5, 34, 11, 52);
+        dibujarCuadro(29, 9, 62, 12);
+        opcion = menuFlechas(opciones, 4, 34, 11, 52);
 
         if (opcion == 0) docenteRegistrarAlumno();
         else if (opcion == 1) docenteListarAlumnos();
         else if (opcion == 2) docenteEditarAlumno();
-        else if (opcion == 3) docenteRetirarAlumno();
         else break;
     }
 }
@@ -782,12 +864,9 @@ void menuGestionAcademico(void) {
 
 void usuarioCrearCuenta(void) {
     Docente nuevo;
-    Materia nuevaMateria;
     char buffer[130];
-    char materiaNombre[60];
 
     memset(&nuevo, 0, sizeof(nuevo));
-    memset(&nuevaMateria, 0, sizeof(nuevaMateria));
 
     pantallaBase("CREAR USUARIO");
     if (totalDocentes >= MAX_DOCENTES) {
@@ -795,91 +874,147 @@ void usuarioCrearCuenta(void) {
         pausa();
         return;
     }
-    if (totalMaterias >= MAX_MATERIAS) {
-        mostrarError("No hay espacio para mas materias.", 23);
-        pausa();
-        return;
-    }
 
-    dibujarCuadro(18, 7, 84, 18);
+    dibujarCuadro(18, 8, 84, 14);
 
-    gotoxy(24, 9); printf("Nombre: ");
-    leerTexto(nuevo.nombres, sizeof(nuevo.nombres), 45, 9);
-    if (!validarNombre(nuevo.nombres)) {
-        mostrarError("Nombre invalido.", 25);
-        pausa();
-        return;
-    }
+    if (!leerCampoRequerido("Nombre", nuevo.nombres, sizeof(nuevo.nombres), 24, 10, 45, validarNombre, "Nombre invalido.")) return;
     capitalizar(nuevo.nombres);
 
-    gotoxy(24, 11); printf("Apellido: ");
-    leerTexto(nuevo.apellidos, sizeof(nuevo.apellidos), 45, 11);
-    if (!validarNombre(nuevo.apellidos)) {
-        mostrarError("Apellido invalido.", 25);
-        pausa();
-        return;
-    }
+    if (!leerCampoRequerido("Apellido", nuevo.apellidos, sizeof(nuevo.apellidos), 24, 12, 45, validarNombre, "Apellido invalido.")) return;
     capitalizar(nuevo.apellidos);
 
-    gotoxy(24, 13); printf("Usuario: ");
-    leerTexto(nuevo.usuario, sizeof(nuevo.usuario), 45, 13);
-    if (strlen(nuevo.usuario) < 3 || buscarDocentePorUsuario(nuevo.usuario) >= 0) {
-        mostrarError("Usuario invalido o ya existe.", 25);
+    while (1) {
+        if (!leerCampoRequerido("Usuario", nuevo.usuario, sizeof(nuevo.usuario), 24, 14, 45, NULL, "")) return;
+        if (strlen(nuevo.usuario) >= 3 && buscarDocentePorUsuario(nuevo.usuario) < 0) break;
+        mostrarError("Usuario invalido o ya existe.", 26);
         pausa();
-        return;
     }
 
-    gotoxy(24, 15); printf("Contrasena: ");
-    leerClave(nuevo.clave, sizeof(nuevo.clave), 45, 15);
-    if (strlen(nuevo.clave) < 4) {
-        mostrarError("La contrasena debe tener minimo 4 caracteres.", 25);
+    while (1) {
+        limpiarArea(24, 16, 78, 1);
+        gotoxy(24, 16); printf("Contrasena (0 volver): ");
+        leerClave(nuevo.clave, sizeof(nuevo.clave), 45, 16);
+        if (strcmp(nuevo.clave, "0") == 0) return;
+        if (strlen(nuevo.clave) >= 4) break;
+        mostrarError("La contrasena debe tener minimo 4 caracteres.", 26);
         pausa();
-        return;
     }
-
-    gotoxy(24, 17); printf("Materia a impartir: ");
-    leerTexto(materiaNombre, sizeof(materiaNombre), 45, 17);
-    if (strlen(materiaNombre) < 3) {
-        mostrarError("Nombre de materia invalido.", 25);
-        pausa();
-        return;
-    }
-    capitalizar(materiaNombre);
 
     nuevo.id = siguienteIdDocente();
     strcpy(nuevo.cedula, "N/A");
     nuevo.activo = 1;
     docentes[totalDocentes++] = nuevo;
 
-    nuevaMateria.id = siguienteIdMateria();
-    snprintf(nuevaMateria.codigo, sizeof(nuevaMateria.codigo), "MAT-%03d", nuevaMateria.id);
-    strcpy(nuevaMateria.nombre, materiaNombre);
-    strcpy(nuevaMateria.periodo, "Actual");
-    nuevaMateria.docenteId = nuevo.id;
-    nuevaMateria.actaGenerada = 0;
-    colocarPlanDefecto(&nuevaMateria);
-    materias[totalMaterias++] = nuevaMateria;
-
     guardarDatos();
 
-    snprintf(buffer, sizeof(buffer), "Usuario creado: %s | Materia: %s", nuevo.usuario, nuevaMateria.nombre);
+    snprintf(buffer, sizeof(buffer), "Usuario creado: %s. Luego cree una seccion.", nuevo.usuario);
     mostrarExito(buffer, 25);
     pausa();
 }
 
 int elegirMateriaDelDocente(void) {
-    int i;
-    int docenteId = docentes[docenteActual].id;
-
-    for (i = 0; i < totalMaterias; i++) {
-        if (materias[i].docenteId == docenteId) {
-            return materias[i].id;
-        }
+    if (seccionActual >= 0 && secciones[seccionActual].activo) {
+        return secciones[seccionActual].materiaId;
     }
 
-    mostrarError("Este usuario no tiene materia registrada.", 22);
+    mostrarError("No hay seccion activa. Cree o cambie una seccion primero.", 22);
     pausa();
     return -1;
+}
+
+void usuarioCrearSeccion(void) {
+    Materia nuevaMateria;
+    Seccion nuevaSeccion;
+    char nombreSeccion[30];
+    char materiaNombre[60];
+    char periodo[20];
+
+    memset(&nuevaMateria, 0, sizeof(nuevaMateria));
+    memset(&nuevaSeccion, 0, sizeof(nuevaSeccion));
+
+    pantallaBase("CREAR SECCION");
+    if (totalSecciones >= MAX_SECCIONES || totalMaterias >= MAX_MATERIAS) {
+        mostrarError("No hay espacio para mas secciones.", 25);
+        pausa();
+        return;
+    }
+
+    dibujarCuadro(18, 8, 84, 14);
+    if (!leerCampoRequerido("Nombre de seccion", nombreSeccion, sizeof(nombreSeccion), 24, 10, 50, NULL, "")) return;
+    capitalizar(nombreSeccion);
+    if (!leerCampoRequerido("Materia", materiaNombre, sizeof(materiaNombre), 24, 12, 50, NULL, "")) return;
+    capitalizar(materiaNombre);
+    if (!leerCampoRequerido("Periodo", periodo, sizeof(periodo), 24, 14, 50, NULL, "")) return;
+
+    nuevaMateria.id = siguienteIdMateria();
+    snprintf(nuevaMateria.codigo, sizeof(nuevaMateria.codigo), "MAT-%03d", nuevaMateria.id);
+    strcpy(nuevaMateria.nombre, materiaNombre);
+    strcpy(nuevaMateria.periodo, periodo);
+    nuevaMateria.docenteId = docentes[docenteActual].id;
+    nuevaMateria.actaGenerada = 0;
+    colocarPlanDefecto(&nuevaMateria);
+    materias[totalMaterias++] = nuevaMateria;
+
+    nuevaSeccion.id = siguienteIdSeccion();
+    nuevaSeccion.docenteId = docentes[docenteActual].id;
+    nuevaSeccion.materiaId = nuevaMateria.id;
+    strcpy(nuevaSeccion.nombre, nombreSeccion);
+    nuevaSeccion.activo = 1;
+    secciones[totalSecciones] = nuevaSeccion;
+    seccionActual = totalSecciones;
+    totalSecciones++;
+
+    guardarDatos();
+    mostrarExito("Seccion creada y seleccionada.", 25);
+    pausa();
+}
+
+void usuarioCambiarSeccion(void) {
+    int i;
+    int opcion;
+    int filas[MAX_SECCIONES];
+    int total = 0;
+    int posMateria;
+
+    pantallaBase("CAMBIAR SECCION");
+    dibujarCuadro(10, 8, 100, 17);
+    gotoxy(14, 9);
+    printf("#   SECCION                  MATERIA                        PERIODO   ALUMNOS");
+
+    for (i = 0; i < totalSecciones && total < 12; i++) {
+        if (secciones[i].docenteId != docentes[docenteActual].id || !secciones[i].activo) continue;
+        posMateria = buscarMateriaPorId(secciones[i].materiaId);
+        if (posMateria < 0) continue;
+        filas[total] = i;
+        gotoxy(14, 11 + total);
+        printf("%-3d %-24.24s %-30.30s %-9.9s %-7d",
+               total + 1,
+               secciones[i].nombre,
+               materias[posMateria].nombre,
+               materias[posMateria].periodo,
+               contarAlumnosMateria(materias[posMateria].id));
+        total++;
+    }
+
+    if (total == 0) {
+        mostrarError("No tiene secciones creadas.", 23);
+        pausa();
+        return;
+    }
+
+    gotoxy(14, 24);
+    printf("Seleccione seccion (0 volver): ");
+    opcion = leerEntero(45, 24);
+    if (opcion == 0) return;
+    if (opcion < 1 || opcion > total) {
+        mostrarError("Seccion invalida.", 26);
+        pausa();
+        return;
+    }
+
+    seccionActual = filas[opcion - 1];
+    mostrarExito("Seccion activa actualizada.", 26);
+    pausa();
 }
 
 int elegirEvaluacionMateria(int posMateria) {
@@ -890,7 +1025,11 @@ int elegirEvaluacionMateria(int posMateria) {
     if (posMateria < 0) return -1;
 
     totalEvaluaciones = materias[posMateria].totalEvaluaciones;
-    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) {
+        mostrarError("Primero debe crear un plan de estudio.", 25);
+        pausa();
+        return -1;
+    }
 
     gotoxy(22, 12);
     printf("Evaluaciones del plan:");
@@ -915,6 +1054,50 @@ int elegirEvaluacionMateria(int posMateria) {
     return opcion - 1;
 }
 
+int seleccionarAlumnoMateria(int materiaId, const char *titulo, int incluirRetirados) {
+    int i;
+    int opcion;
+    int filas[MAX_ALUMNOS];
+    int total = 0;
+
+    pantallaBase(titulo);
+    dibujarCuadro(8, 8, 104, 17);
+    gotoxy(12, 9);
+    printf("#   CEDULA       NOMBRES                  APELLIDOS                ESTADO");
+
+    for (i = 0; i < totalAlumnos && total < 12; i++) {
+        if (alumnos[i].materiaId != materiaId) continue;
+        if (!incluirRetirados && alumnos[i].retirado) continue;
+        filas[total] = i;
+        gotoxy(12, 11 + total);
+        printf("%-3d %-12s %-24.24s %-24.24s %s",
+               total + 1,
+               alumnos[i].cedula,
+               alumnos[i].nombres,
+               alumnos[i].apellidos,
+               alumnos[i].retirado ? "Retirado" : "Activo");
+        total++;
+    }
+
+    if (total == 0) {
+        mostrarError("No hay alumnos disponibles.", 23);
+        pausa();
+        return -1;
+    }
+
+    gotoxy(12, 24);
+    printf("Seleccione alumno (0 volver): ");
+    opcion = leerEntero(41, 24);
+    if (opcion == 0) return -1;
+    if (opcion < 1 || opcion > total) {
+        mostrarError("Alumno invalido.", 26);
+        pausa();
+        return -1;
+    }
+
+    return filas[opcion - 1];
+}
+
 void docenteRegistrarAlumno(void) {
     Alumno nuevo;
     int materiaId;
@@ -931,35 +1114,17 @@ void docenteRegistrarAlumno(void) {
     }
 
     dibujarCuadro(20, 9, 80, 13);
-    gotoxy(26, 11); printf("Cedula: ");
-    leerTexto(nuevo.cedula, sizeof(nuevo.cedula), 48, 11);
-    if (!validarCedula(nuevo.cedula)) {
-        mostrarError("Cedula invalida.", 24);
-        pausa();
-        return;
-    }
+    if (!leerCedulaRequerida(nuevo.cedula, sizeof(nuevo.cedula), 26, 11, 48)) return;
     if (buscarAlumnoPorCedulaMateria(nuevo.cedula, materiaId) >= 0) {
         mostrarError("Ese alumno ya esta registrado en esta materia.", 24);
         pausa();
         return;
     }
 
-    gotoxy(26, 13); printf("Nombres: ");
-    leerTexto(nuevo.nombres, sizeof(nuevo.nombres), 48, 13);
-    if (!validarNombre(nuevo.nombres)) {
-        mostrarError("Nombre invalido.", 24);
-        pausa();
-        return;
-    }
+    if (!leerCampoRequerido("Nombres", nuevo.nombres, sizeof(nuevo.nombres), 26, 13, 48, validarNombre, "Nombre invalido.")) return;
     capitalizar(nuevo.nombres);
 
-    gotoxy(26, 15); printf("Apellidos: ");
-    leerTexto(nuevo.apellidos, sizeof(nuevo.apellidos), 48, 15);
-    if (!validarNombre(nuevo.apellidos)) {
-        mostrarError("Apellido invalido.", 24);
-        pausa();
-        return;
-    }
+    if (!leerCampoRequerido("Apellidos", nuevo.apellidos, sizeof(nuevo.apellidos), 26, 15, 48, validarNombre, "Apellido invalido.")) return;
     capitalizar(nuevo.apellidos);
 
     nuevo.id = siguienteIdAlumno();
@@ -989,7 +1154,7 @@ void docenteListarAlumnos(void) {
     if (materiaId < 0) return;
     posMateria = buscarMateriaPorId(materiaId);
     totalEvaluaciones = materias[posMateria].totalEvaluaciones;
-    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+    if (totalEvaluaciones < 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 0;
 
     pantallaBase("LISTADO DE ALUMNOS");
     dibujarCuadro(4, 8, 112, 17);
@@ -1031,73 +1196,73 @@ void docenteEditarAlumno(void) {
     int materiaId;
     int posMateria;
     int posAlumno;
-    char cedula[20];
+    int accion;
     char nuevoValor[50];
 
     materiaId = elegirMateriaDelDocente();
     if (materiaId < 0) return;
     posMateria = buscarMateriaPorId(materiaId);
 
-    pantallaBase("EDITAR ALUMNO");
-    dibujarCuadro(18, 7, 84, 18);
-    gotoxy(24, 9);
-    printf("Materia: %s", materias[posMateria].nombre);
-    gotoxy(24, 11);
-    printf("Cedula del alumno: ");
-    leerTexto(cedula, sizeof(cedula), 48, 11);
-
-    posAlumno = buscarAlumnoPorCedulaMateria(cedula, materiaId);
+    posAlumno = seleccionarAlumnoMateria(materiaId, "SELECCIONAR ALUMNO", 1);
     if (posAlumno < 0) {
-        mostrarError("Alumno no encontrado.", 25);
+        return;
+    }
+
+    pantallaBase("EDITAR O RETIRAR ALUMNO");
+    dibujarCuadro(22, 8, 76, 15);
+    gotoxy(28, 10);
+    printf("Alumno: %s %s | Cedula: %s", alumnos[posAlumno].nombres, alumnos[posAlumno].apellidos, alumnos[posAlumno].cedula);
+    gotoxy(28, 12);
+    printf("1. Editar datos");
+    gotoxy(28, 14);
+    printf("2. Retirar alumno");
+    gotoxy(28, 16);
+    printf("0. Volver");
+    gotoxy(28, 19);
+    printf("Opcion: ");
+    accion = leerEntero(37, 19);
+
+    if (accion == 0) return;
+    if (accion == 2) {
+        alumnos[posAlumno].retirado = 1;
+        materias[posMateria].actaGenerada = 0;
+        guardarDatos();
+        mostrarExito("Alumno marcado como retirado.", 25);
+        pausa();
+        return;
+    }
+    if (accion != 1) {
+        mostrarError("Opcion invalida.", 25);
         pausa();
         return;
     }
 
-    gotoxy(24, 13);
+    pantallaBase("EDITAR DATOS DEL ALUMNO");
+    dibujarCuadro(18, 7, 84, 18);
+    gotoxy(24, 9);
+    printf("Materia: %s", materias[posMateria].nombre);
+    gotoxy(24, 11);
     printf("Actual: %s | %s %s", alumnos[posAlumno].cedula, alumnos[posAlumno].nombres, alumnos[posAlumno].apellidos);
-    gotoxy(24, 15);
-    printf("Nueva cedula (ENTER conserva): ");
-    leerTexto(nuevoValor, sizeof(nuevoValor), 57, 15);
-    if (strlen(nuevoValor) > 0) {
-        if (!validarCedula(nuevoValor)) {
-            mostrarError("Cedula invalida.", 25);
-            pausa();
-            return;
+
+    while (1) {
+        if (!leerCedulaRequerida(nuevoValor, sizeof(nuevoValor), 24, 14, 52)) return;
+        if (strcmp(nuevoValor, alumnos[posAlumno].cedula) == 0 ||
+            buscarAlumnoPorCedulaMateria(nuevoValor, materiaId) < 0) {
+            strcpy(alumnos[posAlumno].cedula, nuevoValor);
+            break;
         }
-        if (strcmp(nuevoValor, alumnos[posAlumno].cedula) != 0 &&
-            buscarAlumnoPorCedulaMateria(nuevoValor, materiaId) >= 0) {
-            mostrarError("Ya existe otro alumno con esa cedula.", 25);
-            pausa();
-            return;
-        }
-        strcpy(alumnos[posAlumno].cedula, nuevoValor);
+        mostrarError("Ya existe otro alumno con esa cedula.", 26);
+        pausa();
     }
 
-    gotoxy(24, 17);
-    printf("Nuevo nombre (ENTER conserva): ");
-    leerTexto(nuevoValor, sizeof(nuevoValor), 57, 17);
-    if (strlen(nuevoValor) > 0) {
-        if (!validarNombre(nuevoValor)) {
-            mostrarError("Nombre invalido.", 25);
-            pausa();
-            return;
-        }
-        capitalizar(nuevoValor);
-        strcpy(alumnos[posAlumno].nombres, nuevoValor);
-    }
+    if (!leerCampoRequerido("Nombres", nuevoValor, sizeof(nuevoValor), 24, 16, 52, validarNombre, "Nombre invalido.")) return;
+    capitalizar(nuevoValor);
+    strcpy(alumnos[posAlumno].nombres, nuevoValor);
 
-    gotoxy(24, 19);
-    printf("Nuevo apellido (ENTER conserva): ");
-    leerTexto(nuevoValor, sizeof(nuevoValor), 59, 19);
-    if (strlen(nuevoValor) > 0) {
-        if (!validarNombre(nuevoValor)) {
-            mostrarError("Apellido invalido.", 25);
-            pausa();
-            return;
-        }
-        capitalizar(nuevoValor);
-        strcpy(alumnos[posAlumno].apellidos, nuevoValor);
-    }
+    if (!leerCampoRequerido("Apellidos", nuevoValor, sizeof(nuevoValor), 24, 18, 52, validarNombre, "Apellido invalido.")) return;
+    capitalizar(nuevoValor);
+    strcpy(alumnos[posAlumno].apellidos, nuevoValor);
+    alumnos[posAlumno].retirado = 0;
 
     materias[posMateria].actaGenerada = 0;
     guardarDatos();
@@ -1105,43 +1270,64 @@ void docenteEditarAlumno(void) {
     pausa();
 }
 
-void docenteRetirarAlumno(void) {
+void docentePlanEvaluacion(void) {
     int materiaId;
     int posMateria;
-    int posAlumno;
-    char cedula[20];
+    const char *opciones[] = {
+        "Ver plan actual",
+        "Editar plan",
+        "Borrar plan",
+        "Volver"
+    };
+    int opcion;
 
     materiaId = elegirMateriaDelDocente();
     if (materiaId < 0) return;
     posMateria = buscarMateriaPorId(materiaId);
 
-    pantallaBase("RETIRAR ALUMNO");
-    dibujarCuadro(22, 9, 76, 12);
-    gotoxy(28, 11);
-    printf("Materia: %s", materias[posMateria].nombre);
-    gotoxy(28, 13);
-    printf("Cedula del alumno: ");
-    leerTexto(cedula, sizeof(cedula), 50, 13);
+    while (1) {
+        pantallaBase("PLAN DE ESTUDIO");
+        dibujarCuadro(29, 9, 62, 12);
+        opcion = menuFlechas(opciones, 4, 34, 11, 52);
 
-    posAlumno = buscarAlumnoPorCedulaMateria(cedula, materiaId);
-    if (posAlumno < 0) {
-        mostrarError("Alumno no encontrado.", 24);
+        if (opcion == 0) planVerActual(posMateria);
+        else if (opcion == 1) planEditar(posMateria);
+        else if (opcion == 2) planBorrar(posMateria);
+        else break;
+    }
+}
+
+void planVerActual(int posMateria) {
+    int i;
+    int cantidad = materias[posMateria].totalEvaluaciones;
+
+    pantallaBase("PLAN DE ESTUDIO");
+    dibujarCuadro(15, 8, 90, 17);
+    gotoxy(22, 10);
+    printf("Materia: %s", materias[posMateria].nombre);
+
+    if (cantidad <= 0) {
+        gotoxy(22, 12);
+        printf("No hay plan de estudio cargado para esta seccion.");
         pausa();
         return;
     }
 
-    alumnos[posAlumno].retirado = 1;
-    materias[posMateria].actaGenerada = 0;
-    guardarDatos();
-    mostrarExito("Alumno marcado como retirado.", 24);
+    gotoxy(22, 12);
+    printf("Evaluaciones:");
+    for (i = 0; i < cantidad; i++) {
+        gotoxy(24, 14 + i);
+        printf("%d. %-22s %-16s %.2f%%",
+               i + 1,
+               materias[posMateria].evalNombres[i],
+               materias[posMateria].evalTipos[i],
+               materias[posMateria].ponderaciones[i]);
+    }
     pausa();
 }
 
-void docentePlanEvaluacion(void) {
-    int materiaId;
-    int posMateria;
+void planEditar(int posMateria) {
     int i, j;
-    int hayNotas = 0;
     int cantidad;
     float suma = 0.0f;
     float diferencia;
@@ -1151,45 +1337,14 @@ void docentePlanEvaluacion(void) {
     char nombresEval[MAX_EVALS][30];
     char tiposEval[MAX_EVALS][30];
 
-    materiaId = elegirMateriaDelDocente();
-    if (materiaId < 0) return;
-    posMateria = buscarMateriaPorId(materiaId);
-
-    for (i = 0; i < totalAlumnos; i++) {
-        if (alumnos[i].materiaId == materiaId) {
-            for (j = 0; j < MAX_EVALS; j++) {
-                if (alumnos[i].tieneNotas[j]) hayNotas = 1;
-            }
-        }
-    }
-
-    pantallaBase("PLAN DE ESTUDIO");
+    pantallaBase("EDITAR PLAN DE ESTUDIO");
     dibujarCuadro(15, 8, 90, 19);
     gotoxy(22, 10);
     printf("Materia: %s", materias[posMateria].nombre);
-
-    if (hayNotas) {
-        gotoxy(22, 12);
-        printf("El plan no se puede editar porque ya existen notas cargadas.");
-        gotoxy(22, 14);
-        printf("Plan actual:");
-        cantidad = materias[posMateria].totalEvaluaciones;
-        if (cantidad <= 0 || cantidad > MAX_EVALS) cantidad = 3;
-        for (i = 0; i < cantidad; i++) {
-            gotoxy(24, 16 + i);
-            printf("%d. %-18s %-14s %.2f%%",
-                   i + 1,
-                   materias[posMateria].evalNombres[i],
-                   materias[posMateria].evalTipos[i],
-                   materias[posMateria].ponderaciones[i]);
-        }
-        pausa();
-        return;
-    }
-
     gotoxy(22, 12);
-    printf("Cantidad de evaluaciones (1-%d): ", MAX_EVALS);
+    printf("Cantidad de evaluaciones (1-%d, 0 volver): ", MAX_EVALS);
     cantidad = leerEntero(57, 12);
+    if (cantidad == 0) return;
     if (cantidad < 1 || cantidad > MAX_EVALS) {
         mostrarError("Cantidad de evaluaciones invalida.", 25);
         pausa();
@@ -1197,23 +1352,30 @@ void docentePlanEvaluacion(void) {
     }
 
     gotoxy(22, 14);
-    printf("Nombre, tipo y ponderacion. La suma debe ser 100%%.");
+    printf("Nombre, tipo y ponderacion. Use 0 para volver. Suma 100%%.");
     for (i = 0; i < cantidad; i++) {
         gotoxy(22, 16 + i * 2);
         printf("Nombre eval %d: ", i + 1);
         leerTexto(nombreEval, sizeof(nombreEval), 38, 16 + i * 2);
+        if (strcmp(nombreEval, "0") == 0) return;
         if (strlen(nombreEval) == 0) {
-            snprintf(nombreEval, sizeof(nombreEval), "Evaluacion %d", i + 1);
+            mostrarError("El nombre de evaluacion no puede quedar vacio.", 26);
+            pausa();
+            return;
         }
         gotoxy(52, 16 + i * 2);
         printf("Tipo: ");
         leerTexto(tipoEval, sizeof(tipoEval), 58, 16 + i * 2);
+        if (strcmp(tipoEval, "0") == 0) return;
         if (strlen(tipoEval) == 0) {
-            strcpy(tipoEval, "General");
+            mostrarError("El tipo de evaluacion no puede quedar vacio.", 26);
+            pausa();
+            return;
         }
         gotoxy(77, 16 + i * 2);
         printf("Peso: ");
         pesoEval[i] = leerFloat(83, 16 + i * 2);
+        if (pesoEval[i] == 0.0f) return;
         if (pesoEval[i] <= 0.0f) {
             mostrarError("Cada ponderacion debe ser mayor que cero.", 25);
             pausa();
@@ -1247,8 +1409,41 @@ void docentePlanEvaluacion(void) {
     }
     materias[posMateria].totalEvaluaciones = cantidad;
 
+    for (i = 0; i < totalAlumnos; i++) {
+        if (alumnos[i].materiaId != materias[posMateria].id) continue;
+        for (j = 0; j < MAX_EVALS; j++) {
+            alumnos[i].notas[j] = 0.0f;
+            alumnos[i].tieneNotas[j] = 0;
+        }
+    }
+
+    materias[posMateria].actaGenerada = 0;
     guardarDatos();
-    mostrarExito("Plan de estudio guardado correctamente.", 25);
+    mostrarExito("Plan editado. Las notas previas de esta seccion fueron reiniciadas.", 25);
+    pausa();
+}
+
+void planBorrar(int posMateria) {
+    int i, j;
+
+    for (i = 0; i < MAX_EVALS; i++) {
+        materias[posMateria].evalNombres[i][0] = '\0';
+        materias[posMateria].evalTipos[i][0] = '\0';
+        materias[posMateria].ponderaciones[i] = 0.0f;
+    }
+    materias[posMateria].totalEvaluaciones = 0;
+    materias[posMateria].actaGenerada = 0;
+
+    for (i = 0; i < totalAlumnos; i++) {
+        if (alumnos[i].materiaId != materias[posMateria].id) continue;
+        for (j = 0; j < MAX_EVALS; j++) {
+            alumnos[i].notas[j] = 0.0f;
+            alumnos[i].tieneNotas[j] = 0;
+        }
+    }
+
+    guardarDatos();
+    mostrarExito("Plan de estudio borrado para esta seccion.", 25);
     pausa();
 }
 
@@ -1261,7 +1456,6 @@ void docenteCargarNotas(void) {
     int posMateria;
     int posAlumno;
     int evaluacion;
-    char cedula[20];
     float nota;
 
     materiaId = elegirMateriaDelDocente();
@@ -1275,14 +1469,8 @@ void docenteCargarNotas(void) {
     evaluacion = elegirEvaluacionMateria(posMateria);
     if (evaluacion < 0) return;
 
-    gotoxy(22, 22);
-    printf("Cedula del alumno: ");
-    leerTexto(cedula, sizeof(cedula), 43, 22);
-
-    posAlumno = buscarAlumnoPorCedulaMateria(cedula, materiaId);
+    posAlumno = seleccionarAlumnoMateria(materiaId, "SELECCIONAR ALUMNO PARA NOTA", 0);
     if (posAlumno < 0) {
-        mostrarError("Alumno no encontrado en esta materia.", 25);
-        pausa();
         return;
     }
     if (alumnos[posAlumno].retirado) {
@@ -1291,19 +1479,24 @@ void docenteCargarNotas(void) {
         return;
     }
 
-    gotoxy(22, 24);
+    pantallaBase("CARGAR NOTA");
+    dibujarCuadro(18, 9, 84, 12);
+    gotoxy(24, 11);
     printf("Alumno: %s %s", alumnos[posAlumno].nombres, alumnos[posAlumno].apellidos);
-    gotoxy(22, 25);
-    printf("%s / %s - nota 0 a 100: ",
-           materias[posMateria].evalNombres[evaluacion],
-           materias[posMateria].evalTipos[evaluacion]);
-    nota = leerFloat(58, 25);
-    if (nota < 0.0f || nota > NOTA_MAXIMA) {
-        mostrarError("La nota debe estar entre 0 y 100.", 26);
+    gotoxy(24, 13);
+    printf("Evaluacion: %s", materias[posMateria].evalNombres[evaluacion]);
+    gotoxy(24, 15);
+    printf("Tipo: %s", materias[posMateria].evalTipos[evaluacion]);
+    gotoxy(24, 17);
+    printf("Ponderacion de esta evaluacion: %.2f%%", materias[posMateria].ponderaciones[evaluacion]);
+    gotoxy(24, 19);
+    printf("Nota 1 a 20: ");
+    nota = leerFloat(38, 19);
+    if (nota < NOTA_MINIMA || nota > NOTA_MAXIMA) {
+        mostrarError("La nota debe estar entre 1 y 20.", 25);
         pausa();
         return;
     }
-
     alumnos[posAlumno].notas[evaluacion] = nota;
     alumnos[posAlumno].tieneNotas[evaluacion] = 1;
     materias[posMateria].actaGenerada = 0;
@@ -1331,19 +1524,19 @@ void docenteImprimirActa(void) {
     materiaId = elegirMateriaDelDocente();
     if (materiaId < 0) return;
 
-    if (!generarArchivoActa(materiaId, ruta)) {
-        mostrarError("No se pudo generar el archivo del acta.", 25);
+    if (!generarPdfActa(materiaId, ruta)) {
+        mostrarError("No se pudo generar el PDF del acta.", 25);
         pausa();
         return;
     }
 
-    if (imprimirArchivoTexto(ruta)) {
-        mostrarExito("Acta enviada a imprimir con ShellAPI.", 25);
+    if (imprimirArchivo(ruta)) {
+        mostrarExito("Acta PDF enviada a imprimir.", 25);
     } else {
-        mostrarError("No se pudo enviar a imprimir. Revise impresora o app .txt.", 25);
+        mostrarError("No se pudo enviar a imprimir. Revise impresora o lector PDF.", 25);
     }
     gotoxy(8, 26);
-    printf("Archivo generado: %s", ruta);
+    printf("PDF generado en la carpeta de impresiones.");
     pausa();
 }
 
@@ -1369,19 +1562,19 @@ void docenteImprimirBoleta(void) {
         return;
     }
 
-    if (!generarArchivoBoleta(materiaId, posAlumno, ruta)) {
-        mostrarError("No se pudo generar el archivo de la boleta.", 23);
+    if (!generarPdfBoleta(materiaId, posAlumno, ruta)) {
+        mostrarError("No se pudo generar el PDF de la boleta.", 23);
         pausa();
         return;
     }
 
-    if (imprimirArchivoTexto(ruta)) {
-        mostrarExito("Boleta enviada a imprimir con ShellAPI.", 23);
+    if (imprimirArchivo(ruta)) {
+        mostrarExito("Boleta PDF enviada a imprimir.", 23);
     } else {
-        mostrarError("No se pudo enviar a imprimir. Revise impresora o app .txt.", 23);
+        mostrarError("No se pudo enviar a imprimir. Revise impresora o lector PDF.", 23);
     }
     gotoxy(8, 24);
-    printf("Archivo generado: %s", ruta);
+    printf("PDF generado en la carpeta de impresiones.");
     pausa();
 }
 
@@ -1402,7 +1595,11 @@ void verActaMateria(int materiaId, int modoAdmin) {
 
     (void) modoAdmin;
     totalEvaluaciones = materias[posMateria].totalEvaluaciones;
-    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) {
+        mostrarError("Primero debe crear un plan de estudio.", 23);
+        pausa();
+        return;
+    }
 
     nombreDocente(materias[posMateria].docenteId, docente);
     pantallaBase("ACTA DE CALIFICACIONES");
@@ -1460,7 +1657,7 @@ int prepararCarpetaImpresiones(void) {
     return GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
-int generarArchivoActa(int materiaId, char ruta[MAX_PATH]) {
+int generarPdfActa(int materiaId, char ruta[MAX_PATH]) {
     FILE *archivo;
     int posMateria = buscarMateriaPorId(materiaId);
     int totalEvaluaciones;
@@ -1468,56 +1665,61 @@ int generarArchivoActa(int materiaId, char ruta[MAX_PATH]) {
     int completo;
     float definitiva;
     char usuario[120];
+    char dataPath[MAX_PATH];
+    char comando[MAX_PATH * 3];
+    char seccion[30] = "";
 
     if (posMateria < 0 || !prepararCarpetaImpresiones()) return 0;
 
     totalEvaluaciones = materias[posMateria].totalEvaluaciones;
-    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) return 0;
     nombreDocente(materias[posMateria].docenteId, usuario);
+    for (i = 0; i < totalSecciones; i++) {
+        if (secciones[i].materiaId == materiaId) {
+            strcpy(seccion, secciones[i].nombre);
+            break;
+        }
+    }
 
-    snprintf(ruta, MAX_PATH, "%s\\acta_%s.txt", CARPETA_IMPRESIONES, materias[posMateria].codigo);
-    archivo = fopen(ruta, "w");
+    snprintf(dataPath, MAX_PATH, "%s\\acta_%s_data.txt", CARPETA_IMPRESIONES, materias[posMateria].codigo);
+    snprintf(ruta, MAX_PATH, "%s\\acta_%s.pdf", CARPETA_IMPRESIONES, materias[posMateria].codigo);
+    archivo = fopen(dataPath, "w");
     if (archivo == NULL) return 0;
 
-    fprintf(archivo, "ACTA DE CALIFICACIONES\n");
-    fprintf(archivo, "Materia: %s\n", materias[posMateria].nombre);
-    fprintf(archivo, "Codigo: %s\n", materias[posMateria].codigo);
-    fprintf(archivo, "Periodo: %s\n", materias[posMateria].periodo);
-    fprintf(archivo, "Usuario: %s\n\n", usuario);
-    fprintf(archivo, "Plan de estudio:\n");
+    fprintf(archivo, "TYPE|ACTA\n");
+    fprintf(archivo, "MATERIA|%s\n", materias[posMateria].nombre);
+    fprintf(archivo, "CODIGO|%s\n", materias[posMateria].codigo);
+    fprintf(archivo, "PERIODO|%s\n", materias[posMateria].periodo);
+    fprintf(archivo, "SECCION|%s\n", seccion);
+    fprintf(archivo, "DOCENTE|%s\n", usuario);
     for (i = 0; i < totalEvaluaciones; i++) {
-        fprintf(archivo, "E%d - %s | Tipo: %s | Ponderacion: %.2f%%\n",
-                i + 1,
+        fprintf(archivo, "EVAL|%s|%s|%.2f\n",
                 materias[posMateria].evalNombres[i],
                 materias[posMateria].evalTipos[i],
                 materias[posMateria].ponderaciones[i]);
     }
 
-    fprintf(archivo, "\n%-12s %-18s %-18s", "CEDULA", "NOMBRES", "APELLIDOS");
-    for (i = 0; i < totalEvaluaciones; i++) {
-        fprintf(archivo, " E%-2d   ", i + 1);
-    }
-    fprintf(archivo, " PROM.   MENSAJE\n");
-
     for (i = 0; i < totalAlumnos; i++) {
         if (alumnos[i].materiaId != materiaId) continue;
         definitiva = calcularDefinitivaAlumno(&alumnos[i], &materias[posMateria], &completo);
-        fprintf(archivo, "%-12s %-18.18s %-18.18s",
+        fprintf(archivo, "ALUMNO|%s|%s|%s|%d",
                 alumnos[i].cedula,
                 alumnos[i].nombres,
-                alumnos[i].apellidos);
+                alumnos[i].apellidos,
+                alumnos[i].retirado);
         for (j = 0; j < totalEvaluaciones; j++) {
-            fprintf(archivo, " %6.2f", alumnos[i].tieneNotas[j] ? alumnos[i].notas[j] : 0.0f);
+            fprintf(archivo, "|%.2f", alumnos[i].tieneNotas[j] ? alumnos[i].notas[j] : 0.0f);
         }
         (void) completo;
-        fprintf(archivo, " %7.2f %s\n", definitiva, condicionAlumno(&alumnos[i], &materias[posMateria]));
+        fprintf(archivo, "|%.2f|%s\n", definitiva, condicionAlumno(&alumnos[i], &materias[posMateria]));
     }
 
     fclose(archivo);
-    return 1;
+    snprintf(comando, sizeof(comando), "python pdf_report.py acta \"%s\" \"%s\"", dataPath, ruta);
+    return system(comando) == 0;
 }
 
-int generarArchivoBoleta(int materiaId, int posAlumno, char ruta[MAX_PATH]) {
+int generarPdfBoleta(int materiaId, int posAlumno, char ruta[MAX_PATH]) {
     FILE *archivo;
     int posMateria = buscarMateriaPorId(materiaId);
     int totalEvaluaciones;
@@ -1525,30 +1727,47 @@ int generarArchivoBoleta(int materiaId, int posAlumno, char ruta[MAX_PATH]) {
     int completo;
     float definitiva;
     char usuario[120];
+    char dataPath[MAX_PATH];
+    char comando[MAX_PATH * 3];
+    char seccion[30] = "";
 
     if (posMateria < 0 || posAlumno < 0 || !prepararCarpetaImpresiones()) return 0;
 
     totalEvaluaciones = materias[posMateria].totalEvaluaciones;
-    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) return 0;
     nombreDocente(materias[posMateria].docenteId, usuario);
+    for (i = 0; i < totalSecciones; i++) {
+        if (secciones[i].materiaId == materiaId) {
+            strcpy(seccion, secciones[i].nombre);
+            break;
+        }
+    }
     definitiva = calcularDefinitivaAlumno(&alumnos[posAlumno], &materias[posMateria], &completo);
 
-    snprintf(ruta, MAX_PATH, "%s\\boleta_%s_%s.txt",
+    snprintf(dataPath, MAX_PATH, "%s\\boleta_%s_%s_data.txt",
              CARPETA_IMPRESIONES,
              materias[posMateria].codigo,
              alumnos[posAlumno].cedula);
-    archivo = fopen(ruta, "w");
+    snprintf(ruta, MAX_PATH, "%s\\boleta_%s_%s.pdf",
+             CARPETA_IMPRESIONES,
+             materias[posMateria].codigo,
+             alumnos[posAlumno].cedula);
+    archivo = fopen(dataPath, "w");
     if (archivo == NULL) return 0;
 
-    fprintf(archivo, "BOLETA DE CALIFICACIONES\n");
-    fprintf(archivo, "Materia: %s\n", materias[posMateria].nombre);
-    fprintf(archivo, "Usuario: %s\n", usuario);
-    fprintf(archivo, "Alumno: %s %s\n", alumnos[posAlumno].nombres, alumnos[posAlumno].apellidos);
-    fprintf(archivo, "Cedula: %s\n\n", alumnos[posAlumno].cedula);
+    fprintf(archivo, "TYPE|BOLETA\n");
+    fprintf(archivo, "MATERIA|%s\n", materias[posMateria].nombre);
+    fprintf(archivo, "PERIODO|%s\n", materias[posMateria].periodo);
+    fprintf(archivo, "SECCION|%s\n", seccion);
+    fprintf(archivo, "DOCENTE|%s\n", usuario);
+    fprintf(archivo, "ALUMNO|%s|%s|%s|%d\n",
+            alumnos[posAlumno].cedula,
+            alumnos[posAlumno].nombres,
+            alumnos[posAlumno].apellidos,
+            alumnos[posAlumno].retirado);
 
     for (i = 0; i < totalEvaluaciones; i++) {
-        fprintf(archivo, "E%d - %-24s %-14s %.2f%%  Nota: %.2f\n",
-                i + 1,
+        fprintf(archivo, "EVAL|%s|%s|%.2f|%.2f\n",
                 materias[posMateria].evalNombres[i],
                 materias[posMateria].evalTipos[i],
                 materias[posMateria].ponderaciones[i],
@@ -1556,14 +1775,14 @@ int generarArchivoBoleta(int materiaId, int posAlumno, char ruta[MAX_PATH]) {
     }
 
     (void) completo;
-    fprintf(archivo, "\nPromedio: %.2f / 100\n", definitiva);
-    fprintf(archivo, "Mensaje: %s\n", condicionAlumno(&alumnos[posAlumno], &materias[posMateria]));
+    fprintf(archivo, "PROMEDIO|%.2f|%s\n", definitiva, condicionAlumno(&alumnos[posAlumno], &materias[posMateria]));
 
     fclose(archivo);
-    return 1;
+    snprintf(comando, sizeof(comando), "python pdf_report.py boleta \"%s\" \"%s\"", dataPath, ruta);
+    return system(comando) == 0;
 }
 
-int imprimirArchivoTexto(const char *ruta) {
+int imprimirArchivo(const char *ruta) {
     char rutaCompleta[MAX_PATH];
     HINSTANCE resultado;
 

@@ -11,6 +11,8 @@
 data/*.dat
 data/backup_*/
 sencillo/*.dat
+sencillo/__pycache__/
+sencillo/impresiones/
 
 # Local/editor/runtime noise
 .DS_Store
