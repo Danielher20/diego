@@ -5,6 +5,7 @@
 #include <time.h>
 #include <conio.h>
 #include <windows.h>
+#include <shellapi.h>
 
 #define MAX_DOCENTES 30
 #define MAX_MATERIAS 40
@@ -13,6 +14,9 @@
 
 #define ARCHIVO_DATOS "siga_sencillo.dat"
 #define ARCHIVO_MAGIC "SIGA3"
+#define CARPETA_IMPRESIONES "impresiones"
+#define NOTA_MAXIMA 100.0f
+#define NOTA_APROBATORIA 50.0f
 
 #define ANCHO_PANTALLA 120
 #define ALTO_PANTALLA 30
@@ -115,17 +119,27 @@ void nombreDocente(int docenteId, char salida[120]);
 int loginUsuario(void);
 void menuPrincipal(void);
 void menuUsuario(void);
+void menuGestionAlumnos(void);
+void menuGestionAcademico(void);
 
 void usuarioCrearCuenta(void);
 int elegirMateriaDelDocente(void);
+int elegirEvaluacionMateria(int posMateria);
 void docenteRegistrarAlumno(void);
 void docenteListarAlumnos(void);
 void docenteEditarAlumno(void);
 void docenteRetirarAlumno(void);
 void docentePlanEvaluacion(void);
+void docenteVerNotas(void);
 void docenteCargarNotas(void);
 void docenteGenerarActa(void);
+void docenteImprimirActa(void);
+void docenteImprimirBoleta(void);
 void verActaMateria(int materiaId, int modoAdmin);
+int prepararCarpetaImpresiones(void);
+int generarArchivoActa(int materiaId, char ruta[MAX_PATH]);
+int generarArchivoBoleta(int materiaId, int posAlumno, char ruta[MAX_PATH]);
+int imprimirArchivoTexto(const char *ruta);
 
 void configurarConsola(void) {
     char comando[60];
@@ -603,7 +617,7 @@ const char *condicionAlumno(const Alumno *alumno, const Materia *materia) {
 
     if (alumno->retirado) return "RETIRADO";
     definitiva = calcularDefinitivaAlumno(alumno, materia, &completo);
-    if (definitiva >= 10.0f) return "APROBADO";
+    if (definitiva >= NOTA_APROBATORIA) return "APROBADO";
     return "REPROBADO";
 }
 
@@ -677,13 +691,8 @@ void menuPrincipal(void) {
 
 void menuUsuario(void) {
     const char *opciones[] = {
-        "Registrar alumno",
-        "Listado de alumnos",
-        "Editar datos de alumno",
-        "Retirar alumno",
-        "Plan de estudio",
-        "Cargar notas",
-        "Ver acta",
+        "Gestion de alumnos",
+        "Gestion academico",
         "Guardar datos",
         "Cerrar sesion"
     };
@@ -704,17 +713,12 @@ void menuUsuario(void) {
         pantallaBase(titulo);
         gotoxy(8, 7);
         printf("Materia: %s", materiaNombre);
-        dibujarCuadro(29, 8, 62, 20);
-        opcion = menuFlechas(opciones, 9, 34, 10, 52);
+        dibujarCuadro(31, 9, 58, 12);
+        opcion = menuFlechas(opciones, 4, 36, 11, 48);
 
-        if (opcion == 0) docenteRegistrarAlumno();
-        else if (opcion == 1) docenteListarAlumnos();
-        else if (opcion == 2) docenteEditarAlumno();
-        else if (opcion == 3) docenteRetirarAlumno();
-        else if (opcion == 4) docentePlanEvaluacion();
-        else if (opcion == 5) docenteCargarNotas();
-        else if (opcion == 6) docenteGenerarActa();
-        else if (opcion == 7) {
+        if (opcion == 0) menuGestionAlumnos();
+        else if (opcion == 1) menuGestionAcademico();
+        else if (opcion == 2) {
             guardarDatos();
             mostrarExito("Datos guardados correctamente.", 25);
             pausa();
@@ -723,6 +727,56 @@ void menuUsuario(void) {
             docenteActual = -1;
             break;
         }
+    }
+}
+
+void menuGestionAlumnos(void) {
+    const char *opciones[] = {
+        "Registrar alumno",
+        "Listado de alumnos",
+        "Editar datos de alumno",
+        "Retirar alumno",
+        "Volver"
+    };
+    int opcion;
+
+    while (1) {
+        pantallaBase("GESTION DE ALUMNOS");
+        dibujarCuadro(29, 9, 62, 14);
+        opcion = menuFlechas(opciones, 5, 34, 11, 52);
+
+        if (opcion == 0) docenteRegistrarAlumno();
+        else if (opcion == 1) docenteListarAlumnos();
+        else if (opcion == 2) docenteEditarAlumno();
+        else if (opcion == 3) docenteRetirarAlumno();
+        else break;
+    }
+}
+
+void menuGestionAcademico(void) {
+    const char *opciones[] = {
+        "Plan de estudio",
+        "Ver notas",
+        "Cargar nota",
+        "Ver acta",
+        "Imprimir acta",
+        "Imprimir boleta",
+        "Volver"
+    };
+    int opcion;
+
+    while (1) {
+        pantallaBase("GESTION ACADEMICO");
+        dibujarCuadro(29, 8, 62, 18);
+        opcion = menuFlechas(opciones, 7, 34, 10, 52);
+
+        if (opcion == 0) docentePlanEvaluacion();
+        else if (opcion == 1) docenteVerNotas();
+        else if (opcion == 2) docenteCargarNotas();
+        else if (opcion == 3) docenteGenerarActa();
+        else if (opcion == 4) docenteImprimirActa();
+        else if (opcion == 5) docenteImprimirBoleta();
+        else break;
     }
 }
 
@@ -826,6 +880,39 @@ int elegirMateriaDelDocente(void) {
     mostrarError("Este usuario no tiene materia registrada.", 22);
     pausa();
     return -1;
+}
+
+int elegirEvaluacionMateria(int posMateria) {
+    int i;
+    int totalEvaluaciones;
+    int opcion;
+
+    if (posMateria < 0) return -1;
+
+    totalEvaluaciones = materias[posMateria].totalEvaluaciones;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+
+    gotoxy(22, 12);
+    printf("Evaluaciones del plan:");
+    for (i = 0; i < totalEvaluaciones; i++) {
+        gotoxy(24, 14 + i);
+        printf("%d. %-22.22s %-14.14s %.2f%%",
+               i + 1,
+               materias[posMateria].evalNombres[i],
+               materias[posMateria].evalTipos[i],
+               materias[posMateria].ponderaciones[i]);
+    }
+
+    gotoxy(22, 20);
+    printf("Numero de evaluacion: ");
+    opcion = leerEntero(45, 20);
+    if (opcion < 1 || opcion > totalEvaluaciones) {
+        mostrarError("Evaluacion invalida.", 25);
+        pausa();
+        return -1;
+    }
+
+    return opcion - 1;
 }
 
 void docenteRegistrarAlumno(void) {
@@ -1077,7 +1164,7 @@ void docentePlanEvaluacion(void) {
     }
 
     pantallaBase("PLAN DE ESTUDIO");
-    dibujarCuadro(15, 8, 90, 17);
+    dibujarCuadro(15, 8, 90, 19);
     gotoxy(22, 10);
     printf("Materia: %s", materias[posMateria].nombre);
 
@@ -1165,28 +1252,32 @@ void docentePlanEvaluacion(void) {
     pausa();
 }
 
+void docenteVerNotas(void) {
+    docenteListarAlumnos();
+}
+
 void docenteCargarNotas(void) {
     int materiaId;
     int posMateria;
     int posAlumno;
-    int i;
-    int totalEvaluaciones;
+    int evaluacion;
     char cedula[20];
     float nota;
 
     materiaId = elegirMateriaDelDocente();
     if (materiaId < 0) return;
     posMateria = buscarMateriaPorId(materiaId);
-    totalEvaluaciones = materias[posMateria].totalEvaluaciones;
-    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
 
-    pantallaBase("CARGA DE NOTAS");
-    dibujarCuadro(15, 8, 90, 17);
+    pantallaBase("CARGA DE UNA NOTA");
+    dibujarCuadro(15, 8, 90, 19);
     gotoxy(22, 10);
     printf("Materia: %s", materias[posMateria].nombre);
-    gotoxy(22, 12);
+    evaluacion = elegirEvaluacionMateria(posMateria);
+    if (evaluacion < 0) return;
+
+    gotoxy(22, 22);
     printf("Cedula del alumno: ");
-    leerTexto(cedula, sizeof(cedula), 43, 12);
+    leerTexto(cedula, sizeof(cedula), 43, 22);
 
     posAlumno = buscarAlumnoPorCedulaMateria(cedula, materiaId);
     if (posAlumno < 0) {
@@ -1200,32 +1291,24 @@ void docenteCargarNotas(void) {
         return;
     }
 
-    gotoxy(22, 14);
+    gotoxy(22, 24);
     printf("Alumno: %s %s", alumnos[posAlumno].nombres, alumnos[posAlumno].apellidos);
-    for (i = 0; i < totalEvaluaciones; i++) {
-        gotoxy(22, 16 + i * 2);
-        printf("E%d %-18.18s %-12.12s %.0f%% nota 0-20: ",
-               i + 1,
-               materias[posMateria].evalNombres[i],
-               materias[posMateria].evalTipos[i],
-               materias[posMateria].ponderaciones[i]);
-        nota = leerFloat(88, 16 + i * 2);
-        if (nota < 0.0f || nota > 20.0f) {
-            mostrarError("La nota debe estar entre 0 y 20.", 25);
-            pausa();
-            return;
-        }
-        alumnos[posAlumno].notas[i] = nota;
-        alumnos[posAlumno].tieneNotas[i] = 1;
-    }
-    for (i = totalEvaluaciones; i < MAX_EVALS; i++) {
-        alumnos[posAlumno].notas[i] = 0.0f;
-        alumnos[posAlumno].tieneNotas[i] = 0;
+    gotoxy(22, 25);
+    printf("%s / %s - nota 0 a 100: ",
+           materias[posMateria].evalNombres[evaluacion],
+           materias[posMateria].evalTipos[evaluacion]);
+    nota = leerFloat(58, 25);
+    if (nota < 0.0f || nota > NOTA_MAXIMA) {
+        mostrarError("La nota debe estar entre 0 y 100.", 26);
+        pausa();
+        return;
     }
 
+    alumnos[posAlumno].notas[evaluacion] = nota;
+    alumnos[posAlumno].tieneNotas[evaluacion] = 1;
     materias[posMateria].actaGenerada = 0;
     guardarDatos();
-    mostrarExito("Notas guardadas. Si eran existentes, quedaron corregidas.", 25);
+    mostrarExito("Nota guardada. Si ya existia, quedo corregida.", 26);
     pausa();
 }
 
@@ -1239,6 +1322,67 @@ void docenteGenerarActa(void) {
     materias[posMateria].actaGenerada = 1;
     guardarDatos();
     verActaMateria(materiaId, 0);
+}
+
+void docenteImprimirActa(void) {
+    int materiaId;
+    char ruta[MAX_PATH];
+
+    materiaId = elegirMateriaDelDocente();
+    if (materiaId < 0) return;
+
+    if (!generarArchivoActa(materiaId, ruta)) {
+        mostrarError("No se pudo generar el archivo del acta.", 25);
+        pausa();
+        return;
+    }
+
+    if (imprimirArchivoTexto(ruta)) {
+        mostrarExito("Acta enviada a imprimir con ShellAPI.", 25);
+    } else {
+        mostrarError("No se pudo enviar a imprimir. Revise impresora o app .txt.", 25);
+    }
+    gotoxy(8, 26);
+    printf("Archivo generado: %s", ruta);
+    pausa();
+}
+
+void docenteImprimirBoleta(void) {
+    int materiaId;
+    int posAlumno;
+    char cedula[20];
+    char ruta[MAX_PATH];
+
+    materiaId = elegirMateriaDelDocente();
+    if (materiaId < 0) return;
+
+    pantallaBase("IMPRIMIR BOLETA");
+    dibujarCuadro(22, 9, 76, 10);
+    gotoxy(28, 12);
+    printf("Cedula del alumno: ");
+    leerTexto(cedula, sizeof(cedula), 50, 12);
+
+    posAlumno = buscarAlumnoPorCedulaMateria(cedula, materiaId);
+    if (posAlumno < 0) {
+        mostrarError("Alumno no encontrado.", 23);
+        pausa();
+        return;
+    }
+
+    if (!generarArchivoBoleta(materiaId, posAlumno, ruta)) {
+        mostrarError("No se pudo generar el archivo de la boleta.", 23);
+        pausa();
+        return;
+    }
+
+    if (imprimirArchivoTexto(ruta)) {
+        mostrarExito("Boleta enviada a imprimir con ShellAPI.", 23);
+    } else {
+        mostrarError("No se pudo enviar a imprimir. Revise impresora o app .txt.", 23);
+    }
+    gotoxy(8, 24);
+    printf("Archivo generado: %s", ruta);
+    pausa();
 }
 
 void verActaMateria(int materiaId, int modoAdmin) {
@@ -1309,6 +1453,126 @@ void verActaMateria(int materiaId, int modoAdmin) {
     gotoxy(8, 26);
     printf("Acta generada: %s", materias[posMateria].actaGenerada ? "Si" : "No");
     pausa();
+}
+
+int prepararCarpetaImpresiones(void) {
+    if (CreateDirectoryA(CARPETA_IMPRESIONES, NULL)) return 1;
+    return GetLastError() == ERROR_ALREADY_EXISTS;
+}
+
+int generarArchivoActa(int materiaId, char ruta[MAX_PATH]) {
+    FILE *archivo;
+    int posMateria = buscarMateriaPorId(materiaId);
+    int totalEvaluaciones;
+    int i, j;
+    int completo;
+    float definitiva;
+    char usuario[120];
+
+    if (posMateria < 0 || !prepararCarpetaImpresiones()) return 0;
+
+    totalEvaluaciones = materias[posMateria].totalEvaluaciones;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+    nombreDocente(materias[posMateria].docenteId, usuario);
+
+    snprintf(ruta, MAX_PATH, "%s\\acta_%s.txt", CARPETA_IMPRESIONES, materias[posMateria].codigo);
+    archivo = fopen(ruta, "w");
+    if (archivo == NULL) return 0;
+
+    fprintf(archivo, "ACTA DE CALIFICACIONES\n");
+    fprintf(archivo, "Materia: %s\n", materias[posMateria].nombre);
+    fprintf(archivo, "Codigo: %s\n", materias[posMateria].codigo);
+    fprintf(archivo, "Periodo: %s\n", materias[posMateria].periodo);
+    fprintf(archivo, "Usuario: %s\n\n", usuario);
+    fprintf(archivo, "Plan de estudio:\n");
+    for (i = 0; i < totalEvaluaciones; i++) {
+        fprintf(archivo, "E%d - %s | Tipo: %s | Ponderacion: %.2f%%\n",
+                i + 1,
+                materias[posMateria].evalNombres[i],
+                materias[posMateria].evalTipos[i],
+                materias[posMateria].ponderaciones[i]);
+    }
+
+    fprintf(archivo, "\n%-12s %-18s %-18s", "CEDULA", "NOMBRES", "APELLIDOS");
+    for (i = 0; i < totalEvaluaciones; i++) {
+        fprintf(archivo, " E%-2d   ", i + 1);
+    }
+    fprintf(archivo, " PROM.   MENSAJE\n");
+
+    for (i = 0; i < totalAlumnos; i++) {
+        if (alumnos[i].materiaId != materiaId) continue;
+        definitiva = calcularDefinitivaAlumno(&alumnos[i], &materias[posMateria], &completo);
+        fprintf(archivo, "%-12s %-18.18s %-18.18s",
+                alumnos[i].cedula,
+                alumnos[i].nombres,
+                alumnos[i].apellidos);
+        for (j = 0; j < totalEvaluaciones; j++) {
+            fprintf(archivo, " %6.2f", alumnos[i].tieneNotas[j] ? alumnos[i].notas[j] : 0.0f);
+        }
+        (void) completo;
+        fprintf(archivo, " %7.2f %s\n", definitiva, condicionAlumno(&alumnos[i], &materias[posMateria]));
+    }
+
+    fclose(archivo);
+    return 1;
+}
+
+int generarArchivoBoleta(int materiaId, int posAlumno, char ruta[MAX_PATH]) {
+    FILE *archivo;
+    int posMateria = buscarMateriaPorId(materiaId);
+    int totalEvaluaciones;
+    int i;
+    int completo;
+    float definitiva;
+    char usuario[120];
+
+    if (posMateria < 0 || posAlumno < 0 || !prepararCarpetaImpresiones()) return 0;
+
+    totalEvaluaciones = materias[posMateria].totalEvaluaciones;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+    nombreDocente(materias[posMateria].docenteId, usuario);
+    definitiva = calcularDefinitivaAlumno(&alumnos[posAlumno], &materias[posMateria], &completo);
+
+    snprintf(ruta, MAX_PATH, "%s\\boleta_%s_%s.txt",
+             CARPETA_IMPRESIONES,
+             materias[posMateria].codigo,
+             alumnos[posAlumno].cedula);
+    archivo = fopen(ruta, "w");
+    if (archivo == NULL) return 0;
+
+    fprintf(archivo, "BOLETA DE CALIFICACIONES\n");
+    fprintf(archivo, "Materia: %s\n", materias[posMateria].nombre);
+    fprintf(archivo, "Usuario: %s\n", usuario);
+    fprintf(archivo, "Alumno: %s %s\n", alumnos[posAlumno].nombres, alumnos[posAlumno].apellidos);
+    fprintf(archivo, "Cedula: %s\n\n", alumnos[posAlumno].cedula);
+
+    for (i = 0; i < totalEvaluaciones; i++) {
+        fprintf(archivo, "E%d - %-24s %-14s %.2f%%  Nota: %.2f\n",
+                i + 1,
+                materias[posMateria].evalNombres[i],
+                materias[posMateria].evalTipos[i],
+                materias[posMateria].ponderaciones[i],
+                alumnos[posAlumno].tieneNotas[i] ? alumnos[posAlumno].notas[i] : 0.0f);
+    }
+
+    (void) completo;
+    fprintf(archivo, "\nPromedio: %.2f / 100\n", definitiva);
+    fprintf(archivo, "Mensaje: %s\n", condicionAlumno(&alumnos[posAlumno], &materias[posMateria]));
+
+    fclose(archivo);
+    return 1;
+}
+
+int imprimirArchivoTexto(const char *ruta) {
+    char rutaCompleta[MAX_PATH];
+    HINSTANCE resultado;
+
+    if (GetFullPathNameA(ruta, MAX_PATH, rutaCompleta, NULL) == 0) {
+        return 0;
+    }
+
+    resultado = ShellExecuteA(NULL, "print", rutaCompleta, NULL, NULL, SW_HIDE);
+    return (INT_PTR) resultado > 32;
 }
 
 int main(void) {

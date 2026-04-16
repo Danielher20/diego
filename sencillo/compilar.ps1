@@ -6,7 +6,7 @@ if (!(Test-Path $gcc)) {
     exit 1
 }
 
-& $gcc -std=c11 -Wall -Wextra -pedantic .\siga_sencillo.c -o .\siga_sencillo.exe
+& $gcc -std=c11 -Wall -Wextra -pedantic .\siga_sencillo.c -o .\siga_sencillo.exe -lshell32
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Compilado: siga_sencillo.exe"
