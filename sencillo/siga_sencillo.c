@@ -9,16 +9,22 @@
 #define MAX_DOCENTES 30
 #define MAX_MATERIAS 40
 #define MAX_ALUMNOS 400
-#define MAX_EVALS 3
+#define MAX_EVALS 5
 
-#define USER_ADMIN "admin"
-#define PASS_ADMIN "admin123"
 #define ARCHIVO_DATOS "siga_sencillo.dat"
+#define ARCHIVO_MAGIC "SIGA3"
 
 #define ANCHO_PANTALLA 120
 #define ALTO_PANTALLA 30
 #define ANCHO_CUADRO_PRINCIPAL 118
 #define ALTO_CUADRO_PRINCIPAL 29
+
+#define COLOR_NORMAL 15
+#define COLOR_TITULO 11
+#define COLOR_EXITO 10
+#define COLOR_ERROR 12
+#define COLOR_BARRA 10
+#define COLOR_SELECCION 240
 
 typedef struct {
     int id;
@@ -37,7 +43,9 @@ typedef struct {
     char periodo[20];
     int docenteId;
     char evalNombres[MAX_EVALS][30];
+    char evalTipos[MAX_EVALS][30];
     float ponderaciones[MAX_EVALS];
+    int totalEvaluaciones;
     int actaGenerada;
 } Materia;
 
@@ -104,23 +112,16 @@ float calcularDefinitivaAlumno(const Alumno *alumno, const Materia *materia, int
 const char *condicionAlumno(const Alumno *alumno, const Materia *materia);
 void nombreDocente(int docenteId, char salida[120]);
 
-int loginAdmin(void);
-int loginDocente(void);
+int loginUsuario(void);
 void menuPrincipal(void);
-void menuAdministrador(void);
-void menuDocente(void);
+void menuUsuario(void);
 
-void adminRegistrarDocente(void);
-void adminListarDocentes(void);
-void adminRegistrarMateria(void);
-void adminListarMaterias(void);
-void adminAsignarDocente(void);
-void adminSupervisarActas(void);
-void adminReportesGlobales(void);
-
+void usuarioCrearCuenta(void);
 int elegirMateriaDelDocente(void);
 void docenteRegistrarAlumno(void);
 void docenteListarAlumnos(void);
+void docenteEditarAlumno(void);
+void docenteRetirarAlumno(void);
 void docentePlanEvaluacion(void);
 void docenteCargarNotas(void);
 void docenteGenerarActa(void);
@@ -135,7 +136,7 @@ void configurarConsola(void) {
 }
 
 void establecerFondo(void) {
-    system("color 97");
+    system("color 0F");
 }
 
 void color(int color_val) {
@@ -171,7 +172,7 @@ void activarCursor(void) {
 
 void limpiarArea(int x, int y, int ancho, int alto) {
     int i, j;
-    color(159);
+    color(COLOR_NORMAL);
     for (i = 0; i < alto; i++) {
         gotoxy(x, y + i);
         for (j = 0; j < ancho; j++) {
@@ -190,7 +191,7 @@ void cuadroPrincipal(void) {
     for (fila = 0; fila < alto; fila++) {
         gotoxy(x, y + fila);
         for (col = 0; col < ancho; col++) {
-            color(159);
+            color(COLOR_NORMAL);
             if (fila == 0 && col == 0) printf("%c", 201);
             else if (fila == 0 && col == ancho - 1) printf("%c", 187);
             else if (fila == alto - 1 && col == 0) printf("%c", 200);
@@ -208,7 +209,7 @@ void dibujarCuadro(int x, int y, int ancho, int alto) {
     for (fila = 0; fila < alto; fila++) {
         gotoxy(x, y + fila);
         for (col = 0; col < ancho; col++) {
-            color(159);
+            color(COLOR_NORMAL);
             if (fila == 0 && col == 0) printf("%c", 218);
             else if (fila == 0 && col == ancho - 1) printf("%c", 191);
             else if (fila == alto - 1 && col == 0) printf("%c", 192);
@@ -235,23 +236,23 @@ void mostrarMensajeEnCuadro(const char *mensaje, int x, int y, int ancho, int co
     gotoxy(xCentro, y);
     color(colorFondo);
     printf("%s", mensaje);
-    color(159);
+    color(COLOR_NORMAL);
 }
 
 void mostrarError(const char *mensaje, int y) {
-    color(207);
+    color(COLOR_ERROR);
     centrarTexto(mensaje, y);
-    color(159);
+    color(COLOR_NORMAL);
 }
 
 void mostrarExito(const char *mensaje, int y) {
-    color(158);
+    color(COLOR_EXITO);
     centrarTexto(mensaje, y);
-    color(159);
+    color(COLOR_NORMAL);
 }
 
 void pausa(void) {
-    color(159);
+    color(COLOR_NORMAL);
     centrarTexto("Presione cualquier tecla para continuar...", 27);
     getch();
 }
@@ -277,11 +278,11 @@ void mostrarBarraCarga(const char *mensaje) {
     dibujarCuadro(35, 14, 50, 3);
     gotoxy(37, 15);
     for (i = 0; i < 46; i++) {
-        color(158);
+        color(COLOR_BARRA);
         printf("%c", 219);
         Sleep(8);
     }
-    color(159);
+    color(COLOR_NORMAL);
 }
 
 void obtenerFecha(char fecha[20]) {
@@ -292,7 +293,7 @@ void obtenerFecha(char fecha[20]) {
 
 void leerTexto(char *texto, int tamano, int x, int y) {
     activarCursor();
-    color(159);
+    color(COLOR_NORMAL);
     gotoxy(x, y);
     fgets(texto, tamano, stdin);
     texto[strcspn(texto, "\n")] = '\0';
@@ -360,10 +361,10 @@ int menuFlechas(const char *opciones[], int total, int x, int y, int ancho) {
         for (i = 0; i < total; i++) {
             gotoxy(x, y + i * 2);
             if (i == opcion) {
-                color(31);
+                color(COLOR_SELECCION);
                 printf(" > %-*s ", ancho - 4, opciones[i]);
             } else {
-                color(159);
+                color(COLOR_NORMAL);
                 printf("   %-*s ", ancho - 4, opciones[i]);
             }
         }
@@ -385,25 +386,41 @@ int menuFlechas(const char *opciones[], int total, int x, int y, int ancho) {
 
 void pantallaBase(const char *titulo) {
     char fecha[20];
+    int i;
+    int alumnosActivos = 0;
+
+    for (i = 0; i < totalAlumnos; i++) {
+        if (!alumnos[i].retirado) alumnosActivos++;
+    }
+
     establecerFondo();
     limpiarPantalla();
     cuadroPrincipal();
     dibujarCuadro(11, 2, 99, 3);
-    mostrarMensajeEnCuadro(titulo, 11, 3, 99, 159);
+    mostrarMensajeEnCuadro(titulo, 11, 3, 99, COLOR_TITULO);
     obtenerFecha(fecha);
     gotoxy(88, 6);
     printf("Fecha: %s", fecha);
     gotoxy(8, 6);
-    printf("Docentes: %d  Materias: %d  Alumnos: %d", totalDocentes, totalMaterias, totalAlumnos);
+    printf("Usuarios: %d  Materias: %d  Alumnos activos: %d", totalDocentes, totalMaterias, alumnosActivos);
 }
 
 void colocarPlanDefecto(Materia *materia) {
     strcpy(materia->evalNombres[0], "Parcial 1");
     strcpy(materia->evalNombres[1], "Taller");
     strcpy(materia->evalNombres[2], "Proyecto");
+    strcpy(materia->evalTipos[0], "Examen");
+    strcpy(materia->evalTipos[1], "Practica");
+    strcpy(materia->evalTipos[2], "Proyecto");
     materia->ponderaciones[0] = 40.0f;
     materia->ponderaciones[1] = 30.0f;
     materia->ponderaciones[2] = 30.0f;
+    materia->totalEvaluaciones = 3;
+    for (int i = 3; i < MAX_EVALS; i++) {
+        materia->evalNombres[i][0] = '\0';
+        materia->evalTipos[i][0] = '\0';
+        materia->ponderaciones[i] = 0.0f;
+    }
 }
 
 void cargarDatos(void) {
@@ -418,7 +435,7 @@ void cargarDatos(void) {
         return;
     }
 
-    if (strncmp(magic, "SIGA2", 5) != 0) {
+    if (strncmp(magic, ARCHIVO_MAGIC, 5) != 0) {
         fclose(archivo);
         return;
     }
@@ -445,7 +462,7 @@ void cargarDatos(void) {
 
 void guardarDatos(void) {
     FILE *archivo;
-    char magic[8] = "SIGA2";
+    char magic[8] = ARCHIVO_MAGIC;
 
     archivo = fopen(ARCHIVO_DATOS, "wb");
     if (archivo == NULL) {
@@ -556,18 +573,23 @@ int contarAlumnosMateria(int materiaId) {
 
 float calcularDefinitivaAlumno(const Alumno *alumno, const Materia *materia, int *completo) {
     int i;
+    int totalEvaluaciones = materia->totalEvaluaciones;
     float definitiva = 0.0f;
     *completo = 1;
+
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) {
+        totalEvaluaciones = 3;
+    }
 
     if (alumno->retirado) {
         *completo = 1;
         return 0.0f;
     }
 
-    for (i = 0; i < MAX_EVALS; i++) {
+    for (i = 0; i < totalEvaluaciones; i++) {
         if (!alumno->tieneNotas[i]) {
             *completo = 0;
-            return 0.0f;
+            continue;
         }
         definitiva += alumno->notas[i] * (materia->ponderaciones[i] / 100.0f);
     }
@@ -581,7 +603,6 @@ const char *condicionAlumno(const Alumno *alumno, const Materia *materia) {
 
     if (alumno->retirado) return "RETIRADO";
     definitiva = calcularDefinitivaAlumno(alumno, materia, &completo);
-    if (!completo) return "INCOMPLETO";
     if (definitiva >= 10.0f) return "APROBADO";
     return "REPROBADO";
 }
@@ -595,33 +616,11 @@ void nombreDocente(int docenteId, char salida[120]) {
     snprintf(salida, 120, "%s %s", docentes[pos].nombres, docentes[pos].apellidos);
 }
 
-int loginAdmin(void) {
-    char usuario[30], clave[30];
-
-    pantallaBase("LOGIN ADMINISTRADOR");
-    dibujarCuadro(35, 9, 50, 10);
-    gotoxy(42, 12);
-    printf("Usuario: ");
-    leerTexto(usuario, sizeof(usuario), 51, 12);
-    gotoxy(42, 14);
-    printf("Clave: ");
-    leerClave(clave, sizeof(clave), 49, 14);
-
-    if (strcmp(usuario, USER_ADMIN) == 0 && strcmp(clave, PASS_ADMIN) == 0) {
-        mostrarBarraCarga("Entrando al panel del director...");
-        return 1;
-    }
-
-    mostrarError("Usuario o clave de administrador incorrecta.", 22);
-    pausa();
-    return 0;
-}
-
-int loginDocente(void) {
+int loginUsuario(void) {
     char usuario[30], clave[30];
     int pos;
 
-    pantallaBase("LOGIN DOCENTE");
+    pantallaBase("LOGIN DE USUARIO");
     dibujarCuadro(35, 9, 50, 10);
     gotoxy(42, 12);
     printf("Usuario: ");
@@ -633,33 +632,42 @@ int loginDocente(void) {
     pos = buscarDocentePorUsuario(usuario);
     if (pos >= 0 && docentes[pos].activo && strcmp(docentes[pos].clave, clave) == 0) {
         docenteActual = pos;
-        mostrarBarraCarga("Entrando al panel del docente...");
+        mostrarBarraCarga("Entrando al panel de usuario...");
         return 1;
     }
 
-    mostrarError("Usuario o clave de docente incorrecta.", 22);
+    mostrarError("Usuario o contrasena incorrectos.", 22);
     pausa();
     return 0;
 }
 
 void menuPrincipal(void) {
     const char *opciones[] = {
-        "Panel Administrador",
-        "Panel Docente",
+        "Iniciar sesion",
+        "Crear usuario",
         "Salir"
     };
     int opcion;
 
     while (1) {
+        if (totalDocentes == 0) {
+            pantallaBase("CREAR PRIMER USUARIO");
+            dibujarCuadro(24, 10, 72, 8);
+            mostrarMensajeEnCuadro("No hay usuarios registrados. Cree el primer usuario.", 24, 13, 72, COLOR_NORMAL);
+            pausa();
+            usuarioCrearCuenta();
+            continue;
+        }
+
         pantallaBase("SISTEMA DE GESTION ACADEMICA SENCILLO");
         dibujarCuadro(37, 10, 46, 10);
-        mostrarMensajeEnCuadro("Seleccione con flechas y ENTER", 37, 11, 46, 159);
+        mostrarMensajeEnCuadro("Seleccione con flechas y ENTER", 37, 11, 46, COLOR_NORMAL);
         opcion = menuFlechas(opciones, 3, 42, 14, 36);
 
         if (opcion == 0) {
-            if (loginAdmin()) menuAdministrador();
+            if (loginUsuario()) menuUsuario();
         } else if (opcion == 1) {
-            if (loginDocente()) menuDocente();
+            usuarioCrearCuenta();
         } else {
             guardarDatos();
             break;
@@ -667,70 +675,46 @@ void menuPrincipal(void) {
     }
 }
 
-void menuAdministrador(void) {
+void menuUsuario(void) {
     const char *opciones[] = {
-        "Registrar docente y crear usuario",
-        "Listar docentes",
-        "Registrar materia",
-        "Listar materias",
-        "Asignar docente a materia",
-        "Supervision de actas",
-        "Reportes globales",
-        "Guardar datos",
-        "Cerrar sesion"
-    };
-    int opcion;
-
-    while (1) {
-        pantallaBase("PANEL ADMINISTRADOR - DIRECTOR");
-        dibujarCuadro(30, 8, 60, 18);
-        opcion = menuFlechas(opciones, 9, 35, 10, 50);
-
-        if (opcion == 0) adminRegistrarDocente();
-        else if (opcion == 1) adminListarDocentes();
-        else if (opcion == 2) adminRegistrarMateria();
-        else if (opcion == 3) adminListarMaterias();
-        else if (opcion == 4) adminAsignarDocente();
-        else if (opcion == 5) adminSupervisarActas();
-        else if (opcion == 6) adminReportesGlobales();
-        else if (opcion == 7) {
-            guardarDatos();
-            mostrarExito("Datos guardados correctamente.", 25);
-            pausa();
-        } else {
-            guardarDatos();
-            break;
-        }
-    }
-}
-
-void menuDocente(void) {
-    const char *opciones[] = {
-        "Registrar alumno en materia",
+        "Registrar alumno",
         "Listado de alumnos",
-        "Plan de evaluacion",
-        "Carga de notas",
-        "Generar / ver acta",
+        "Editar datos de alumno",
+        "Retirar alumno",
+        "Plan de estudio",
+        "Cargar notas",
+        "Ver acta",
         "Guardar datos",
         "Cerrar sesion"
     };
     char titulo[140];
+    char materiaNombre[70] = "Sin materia";
+    int i;
     int opcion;
 
     while (1) {
-        snprintf(titulo, sizeof(titulo), "PANEL DOCENTE - %s %s", docentes[docenteActual].nombres, docentes[docenteActual].apellidos);
+        for (i = 0; i < totalMaterias; i++) {
+            if (materias[i].docenteId == docentes[docenteActual].id) {
+                strcpy(materiaNombre, materias[i].nombre);
+                break;
+            }
+        }
+
+        snprintf(titulo, sizeof(titulo), "PANEL DE USUARIO - %s %s", docentes[docenteActual].nombres, docentes[docenteActual].apellidos);
         pantallaBase(titulo);
         gotoxy(8, 7);
-        printf("Materias asignadas: %d", contarMateriasDocente(docentes[docenteActual].id));
-        dibujarCuadro(31, 9, 58, 16);
-        opcion = menuFlechas(opciones, 7, 36, 11, 48);
+        printf("Materia: %s", materiaNombre);
+        dibujarCuadro(29, 8, 62, 20);
+        opcion = menuFlechas(opciones, 9, 34, 10, 52);
 
         if (opcion == 0) docenteRegistrarAlumno();
         else if (opcion == 1) docenteListarAlumnos();
-        else if (opcion == 2) docentePlanEvaluacion();
-        else if (opcion == 3) docenteCargarNotas();
-        else if (opcion == 4) docenteGenerarActa();
-        else if (opcion == 5) {
+        else if (opcion == 2) docenteEditarAlumno();
+        else if (opcion == 3) docenteRetirarAlumno();
+        else if (opcion == 4) docentePlanEvaluacion();
+        else if (opcion == 5) docenteCargarNotas();
+        else if (opcion == 6) docenteGenerarActa();
+        else if (opcion == 7) {
             guardarDatos();
             mostrarExito("Datos guardados correctamente.", 25);
             pausa();
@@ -742,28 +726,31 @@ void menuDocente(void) {
     }
 }
 
-void adminRegistrarDocente(void) {
+void usuarioCrearCuenta(void) {
     Docente nuevo;
+    Materia nuevaMateria;
     char buffer[130];
+    char materiaNombre[60];
 
-    pantallaBase("REGISTRAR DOCENTE");
+    memset(&nuevo, 0, sizeof(nuevo));
+    memset(&nuevaMateria, 0, sizeof(nuevaMateria));
+
+    pantallaBase("CREAR USUARIO");
     if (totalDocentes >= MAX_DOCENTES) {
-        mostrarError("No hay espacio para mas docentes.", 23);
+        mostrarError("No hay espacio para mas usuarios.", 23);
+        pausa();
+        return;
+    }
+    if (totalMaterias >= MAX_MATERIAS) {
+        mostrarError("No hay espacio para mas materias.", 23);
         pausa();
         return;
     }
 
-    dibujarCuadro(18, 8, 84, 16);
-    gotoxy(24, 10); printf("Cedula: ");
-    leerTexto(nuevo.cedula, sizeof(nuevo.cedula), 45, 10);
-    if (!validarCedula(nuevo.cedula)) {
-        mostrarError("Cedula invalida. Use solo numeros y minimo 6 digitos.", 25);
-        pausa();
-        return;
-    }
+    dibujarCuadro(18, 7, 84, 18);
 
-    gotoxy(24, 12); printf("Nombres: ");
-    leerTexto(nuevo.nombres, sizeof(nuevo.nombres), 45, 12);
+    gotoxy(24, 9); printf("Nombre: ");
+    leerTexto(nuevo.nombres, sizeof(nuevo.nombres), 45, 9);
     if (!validarNombre(nuevo.nombres)) {
         mostrarError("Nombre invalido.", 25);
         pausa();
@@ -771,8 +758,8 @@ void adminRegistrarDocente(void) {
     }
     capitalizar(nuevo.nombres);
 
-    gotoxy(24, 14); printf("Apellidos: ");
-    leerTexto(nuevo.apellidos, sizeof(nuevo.apellidos), 45, 14);
+    gotoxy(24, 11); printf("Apellido: ");
+    leerTexto(nuevo.apellidos, sizeof(nuevo.apellidos), 45, 11);
     if (!validarNombre(nuevo.apellidos)) {
         mostrarError("Apellido invalido.", 25);
         pausa();
@@ -780,285 +767,65 @@ void adminRegistrarDocente(void) {
     }
     capitalizar(nuevo.apellidos);
 
-    gotoxy(24, 16); printf("Usuario para el docente: ");
-    leerTexto(nuevo.usuario, sizeof(nuevo.usuario), 45, 16);
+    gotoxy(24, 13); printf("Usuario: ");
+    leerTexto(nuevo.usuario, sizeof(nuevo.usuario), 45, 13);
     if (strlen(nuevo.usuario) < 3 || buscarDocentePorUsuario(nuevo.usuario) >= 0) {
         mostrarError("Usuario invalido o ya existe.", 25);
         pausa();
         return;
     }
 
-    gotoxy(24, 18); printf("Clave asignada por admin: ");
-    leerTexto(nuevo.clave, sizeof(nuevo.clave), 45, 18);
+    gotoxy(24, 15); printf("Contrasena: ");
+    leerClave(nuevo.clave, sizeof(nuevo.clave), 45, 15);
     if (strlen(nuevo.clave) < 4) {
-        mostrarError("La clave debe tener minimo 4 caracteres.", 25);
+        mostrarError("La contrasena debe tener minimo 4 caracteres.", 25);
         pausa();
         return;
     }
+
+    gotoxy(24, 17); printf("Materia a impartir: ");
+    leerTexto(materiaNombre, sizeof(materiaNombre), 45, 17);
+    if (strlen(materiaNombre) < 3) {
+        mostrarError("Nombre de materia invalido.", 25);
+        pausa();
+        return;
+    }
+    capitalizar(materiaNombre);
 
     nuevo.id = siguienteIdDocente();
+    strcpy(nuevo.cedula, "N/A");
     nuevo.activo = 1;
     docentes[totalDocentes++] = nuevo;
+
+    nuevaMateria.id = siguienteIdMateria();
+    snprintf(nuevaMateria.codigo, sizeof(nuevaMateria.codigo), "MAT-%03d", nuevaMateria.id);
+    strcpy(nuevaMateria.nombre, materiaNombre);
+    strcpy(nuevaMateria.periodo, "Actual");
+    nuevaMateria.docenteId = nuevo.id;
+    nuevaMateria.actaGenerada = 0;
+    colocarPlanDefecto(&nuevaMateria);
+    materias[totalMaterias++] = nuevaMateria;
+
     guardarDatos();
 
-    snprintf(buffer, sizeof(buffer), "Docente creado. Usuario: %s  Clave: %s", nuevo.usuario, nuevo.clave);
+    snprintf(buffer, sizeof(buffer), "Usuario creado: %s | Materia: %s", nuevo.usuario, nuevaMateria.nombre);
     mostrarExito(buffer, 25);
-    pausa();
-}
-
-void adminListarDocentes(void) {
-    int i;
-    int y = 10;
-
-    pantallaBase("LISTADO DE DOCENTES");
-    dibujarCuadro(7, 8, 106, 17);
-    gotoxy(10, 9);
-    printf("ID   CEDULA       DOCENTE                         USUARIO          MATERIAS  ESTADO");
-
-    for (i = 0; i < totalDocentes && i < 13; i++) {
-        gotoxy(10, y + i);
-        printf("%-4d %-12s %-30s %-15s %-8d %s",
-               docentes[i].id,
-               docentes[i].cedula,
-               docentes[i].apellidos,
-               docentes[i].usuario,
-               contarMateriasDocente(docentes[i].id),
-               docentes[i].activo ? "Activo" : "Suspendido");
-    }
-
-    if (totalDocentes == 0) {
-        mostrarError("No hay docentes registrados.", 17);
-    } else if (totalDocentes > 13) {
-        gotoxy(10, 24);
-        printf("Mostrando primeros 13 docentes de %d.", totalDocentes);
-    }
-    pausa();
-}
-
-void adminRegistrarMateria(void) {
-    Materia nueva;
-    int docenteId;
-    int posDocente;
-
-    pantallaBase("REGISTRAR MATERIA");
-    if (totalMaterias >= MAX_MATERIAS) {
-        mostrarError("No hay espacio para mas materias.", 23);
-        pausa();
-        return;
-    }
-
-    dibujarCuadro(18, 8, 84, 15);
-    gotoxy(24, 10); printf("Codigo: ");
-    leerTexto(nueva.codigo, sizeof(nueva.codigo), 45, 10);
-    if (strlen(nueva.codigo) < 2) {
-        mostrarError("Codigo invalido.", 24);
-        pausa();
-        return;
-    }
-
-    gotoxy(24, 12); printf("Nombre de materia: ");
-    leerTexto(nueva.nombre, sizeof(nueva.nombre), 45, 12);
-    if (strlen(nueva.nombre) < 3) {
-        mostrarError("Nombre de materia invalido.", 24);
-        pausa();
-        return;
-    }
-    capitalizar(nueva.nombre);
-
-    gotoxy(24, 14); printf("Periodo: ");
-    leerTexto(nueva.periodo, sizeof(nueva.periodo), 45, 14);
-    if (strlen(nueva.periodo) == 0) strcpy(nueva.periodo, "2026-1");
-
-    gotoxy(24, 16); printf("ID docente (0 sin asignar): ");
-    docenteId = leerEntero(52, 16);
-    if (docenteId != 0) {
-        posDocente = buscarDocentePorId(docenteId);
-        if (posDocente < 0 || !docentes[posDocente].activo) {
-            mostrarError("Docente no existe o esta suspendido.", 24);
-            pausa();
-            return;
-        }
-    }
-
-    nueva.id = siguienteIdMateria();
-    nueva.docenteId = docenteId;
-    nueva.actaGenerada = 0;
-    colocarPlanDefecto(&nueva);
-    materias[totalMaterias++] = nueva;
-    guardarDatos();
-
-    mostrarExito("Materia registrada correctamente.", 24);
-    pausa();
-}
-
-void adminListarMaterias(void) {
-    int i;
-    int y = 10;
-    char docente[120];
-
-    pantallaBase("LISTADO DE MATERIAS");
-    dibujarCuadro(5, 8, 110, 17);
-    gotoxy(8, 9);
-    printf("ID   CODIGO      MATERIA                       PERIODO     DOCENTE              ALUMNOS ACTA");
-
-    for (i = 0; i < totalMaterias && i < 13; i++) {
-        nombreDocente(materias[i].docenteId, docente);
-        gotoxy(8, y + i);
-        printf("%-4d %-11s %-28s %-10s %-20s %-7d %s",
-               materias[i].id,
-               materias[i].codigo,
-               materias[i].nombre,
-               materias[i].periodo,
-               docente,
-               contarAlumnosMateria(materias[i].id),
-               materias[i].actaGenerada ? "Si" : "No");
-    }
-
-    if (totalMaterias == 0) {
-        mostrarError("No hay materias registradas.", 17);
-    } else if (totalMaterias > 13) {
-        gotoxy(8, 24);
-        printf("Mostrando primeras 13 materias de %d.", totalMaterias);
-    }
-    pausa();
-}
-
-void adminAsignarDocente(void) {
-    int idMateria, idDocente;
-    int posMateria, posDocente;
-
-    pantallaBase("ASIGNAR DOCENTE A MATERIA");
-    dibujarCuadro(22, 9, 76, 11);
-    gotoxy(28, 12); printf("ID materia: ");
-    idMateria = leerEntero(48, 12);
-    posMateria = buscarMateriaPorId(idMateria);
-    if (posMateria < 0) {
-        mostrarError("Materia no encontrada.", 23);
-        pausa();
-        return;
-    }
-
-    gotoxy(28, 14); printf("ID docente: ");
-    idDocente = leerEntero(48, 14);
-    posDocente = buscarDocentePorId(idDocente);
-    if (posDocente < 0 || !docentes[posDocente].activo) {
-        mostrarError("Docente no encontrado o suspendido.", 23);
-        pausa();
-        return;
-    }
-
-    materias[posMateria].docenteId = idDocente;
-    guardarDatos();
-    mostrarExito("Docente asignado a la materia.", 23);
-    pausa();
-}
-
-void adminSupervisarActas(void) {
-    int idMateria;
-    int posMateria;
-
-    pantallaBase("SUPERVISION DE ACTAS");
-    adminListarMaterias();
-
-    pantallaBase("SUPERVISION DE ACTAS");
-    dibujarCuadro(25, 10, 70, 8);
-    gotoxy(31, 13);
-    printf("Ingrese ID de la materia para ver su acta: ");
-    idMateria = leerEntero(72, 13);
-    posMateria = buscarMateriaPorId(idMateria);
-    if (posMateria < 0) {
-        mostrarError("Materia no encontrada.", 23);
-        pausa();
-        return;
-    }
-    verActaMateria(idMateria, 1);
-}
-
-void adminReportesGlobales(void) {
-    int i;
-    int aprobados = 0, reprobados = 0, incompletos = 0, retirados = 0;
-    int completo;
-    float definitiva;
-    int posMateria;
-
-    for (i = 0; i < totalAlumnos; i++) {
-        posMateria = buscarMateriaPorId(alumnos[i].materiaId);
-        if (posMateria < 0) continue;
-        if (alumnos[i].retirado) {
-            retirados++;
-            continue;
-        }
-        definitiva = calcularDefinitivaAlumno(&alumnos[i], &materias[posMateria], &completo);
-        if (!completo) incompletos++;
-        else if (definitiva >= 10.0f) aprobados++;
-        else reprobados++;
-    }
-
-    pantallaBase("REPORTES GLOBALES");
-    dibujarCuadro(25, 8, 70, 16);
-    gotoxy(34, 11); printf("Docentes registrados:       %d", totalDocentes);
-    gotoxy(34, 12); printf("Materias registradas:       %d", totalMaterias);
-    gotoxy(34, 13); printf("Alumnos registrados:        %d", totalAlumnos);
-    gotoxy(34, 15); printf("Aprobados:                  %d", aprobados);
-    gotoxy(34, 16); printf("Reprobados:                 %d", reprobados);
-    gotoxy(34, 17); printf("Incompletos:                %d", incompletos);
-    gotoxy(34, 18); printf("Retirados:                  %d", retirados);
-    gotoxy(34, 20); printf("Actas generadas:            ");
-
-    {
-        int actas = 0;
-        for (i = 0; i < totalMaterias; i++) {
-            if (materias[i].actaGenerada) actas++;
-        }
-        printf("%d", actas);
-    }
-
     pausa();
 }
 
 int elegirMateriaDelDocente(void) {
     int i;
-    int idMateria;
-    int posMateria;
-    int y = 11;
     int docenteId = docentes[docenteActual].id;
-
-    pantallaBase("MATERIAS DEL DOCENTE");
-    dibujarCuadro(10, 8, 100, 16);
-    gotoxy(14, 9);
-    printf("ID   CODIGO      MATERIA                       PERIODO     ALUMNOS  ACTA");
 
     for (i = 0; i < totalMaterias; i++) {
         if (materias[i].docenteId == docenteId) {
-            gotoxy(14, y++);
-            printf("%-4d %-11s %-28s %-10s %-8d %s",
-                   materias[i].id,
-                   materias[i].codigo,
-                   materias[i].nombre,
-                   materias[i].periodo,
-                   contarAlumnosMateria(materias[i].id),
-                   materias[i].actaGenerada ? "Si" : "No");
+            return materias[i].id;
         }
     }
 
-    if (y == 11) {
-        mostrarError("Este docente no tiene materias asignadas por el admin.", 22);
-        pausa();
-        return -1;
-    }
-
-    gotoxy(14, 24);
-    printf("ID de la materia: ");
-    idMateria = leerEntero(32, 24);
-    posMateria = buscarMateriaPorId(idMateria);
-
-    if (posMateria < 0 || materias[posMateria].docenteId != docenteId) {
-        mostrarError("Materia no valida para este docente.", 26);
-        pausa();
-        return -1;
-    }
-
-    return idMateria;
+    mostrarError("Este usuario no tiene materia registrada.", 22);
+    pausa();
+    return -1;
 }
 
 void docenteRegistrarAlumno(void) {
@@ -1125,44 +892,161 @@ void docenteRegistrarAlumno(void) {
 void docenteListarAlumnos(void) {
     int materiaId;
     int posMateria;
-    int i;
-    int y = 11;
+    int i, j;
+    int totalEvaluaciones;
+    int y = 12;
     int completo;
     float definitiva;
 
     materiaId = elegirMateriaDelDocente();
     if (materiaId < 0) return;
     posMateria = buscarMateriaPorId(materiaId);
+    totalEvaluaciones = materias[posMateria].totalEvaluaciones;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
 
     pantallaBase("LISTADO DE ALUMNOS");
     dibujarCuadro(4, 8, 112, 17);
     gotoxy(8, 9);
     printf("Materia: %s", materias[posMateria].nombre);
     gotoxy(8, 10);
-    printf("CEDULA       ALUMNO                         N1     N2     N3     DEFINITIVA  CONDICION");
+    printf("CEDULA       NOMBRES          APELLIDOS        ");
+    for (j = 0; j < totalEvaluaciones; j++) {
+        printf("E%-2d    ", j + 1);
+    }
+    printf("PROM.   CONDICION");
 
     for (i = 0; i < totalAlumnos && y < 24; i++) {
         if (alumnos[i].materiaId == materiaId) {
             definitiva = calcularDefinitivaAlumno(&alumnos[i], &materias[posMateria], &completo);
-            gotoxy(8, y++);
-            printf("%-12s %-30s %5.2f  %5.2f  %5.2f  %8s  %s",
+            gotoxy(8, y);
+            printf("%-12s %-16.16s %-16.16s",
                    alumnos[i].cedula,
-                   alumnos[i].apellidos,
-                   alumnos[i].tieneNotas[0] ? alumnos[i].notas[0] : 0.0f,
-                   alumnos[i].tieneNotas[1] ? alumnos[i].notas[1] : 0.0f,
-                   alumnos[i].tieneNotas[2] ? alumnos[i].notas[2] : 0.0f,
-                   completo ? "" : "Pend.",
-                   condicionAlumno(&alumnos[i], &materias[posMateria]));
-            if (completo) {
-                gotoxy(82, y - 1);
-                printf("%8.2f", definitiva);
+                   alumnos[i].nombres,
+                   alumnos[i].apellidos);
+            for (j = 0; j < totalEvaluaciones; j++) {
+                if (alumnos[i].tieneNotas[j]) printf(" %5.2f ", alumnos[i].notas[j]);
+                else printf("  --   ");
             }
+            (void) completo;
+            printf(" %6.2f ", definitiva);
+            printf("%s", condicionAlumno(&alumnos[i], &materias[posMateria]));
+            y++;
         }
     }
 
-    if (y == 11) {
+    if (y == 12) {
         mostrarError("No hay alumnos registrados en esta materia.", 18);
     }
+    pausa();
+}
+
+void docenteEditarAlumno(void) {
+    int materiaId;
+    int posMateria;
+    int posAlumno;
+    char cedula[20];
+    char nuevoValor[50];
+
+    materiaId = elegirMateriaDelDocente();
+    if (materiaId < 0) return;
+    posMateria = buscarMateriaPorId(materiaId);
+
+    pantallaBase("EDITAR ALUMNO");
+    dibujarCuadro(18, 7, 84, 18);
+    gotoxy(24, 9);
+    printf("Materia: %s", materias[posMateria].nombre);
+    gotoxy(24, 11);
+    printf("Cedula del alumno: ");
+    leerTexto(cedula, sizeof(cedula), 48, 11);
+
+    posAlumno = buscarAlumnoPorCedulaMateria(cedula, materiaId);
+    if (posAlumno < 0) {
+        mostrarError("Alumno no encontrado.", 25);
+        pausa();
+        return;
+    }
+
+    gotoxy(24, 13);
+    printf("Actual: %s | %s %s", alumnos[posAlumno].cedula, alumnos[posAlumno].nombres, alumnos[posAlumno].apellidos);
+    gotoxy(24, 15);
+    printf("Nueva cedula (ENTER conserva): ");
+    leerTexto(nuevoValor, sizeof(nuevoValor), 57, 15);
+    if (strlen(nuevoValor) > 0) {
+        if (!validarCedula(nuevoValor)) {
+            mostrarError("Cedula invalida.", 25);
+            pausa();
+            return;
+        }
+        if (strcmp(nuevoValor, alumnos[posAlumno].cedula) != 0 &&
+            buscarAlumnoPorCedulaMateria(nuevoValor, materiaId) >= 0) {
+            mostrarError("Ya existe otro alumno con esa cedula.", 25);
+            pausa();
+            return;
+        }
+        strcpy(alumnos[posAlumno].cedula, nuevoValor);
+    }
+
+    gotoxy(24, 17);
+    printf("Nuevo nombre (ENTER conserva): ");
+    leerTexto(nuevoValor, sizeof(nuevoValor), 57, 17);
+    if (strlen(nuevoValor) > 0) {
+        if (!validarNombre(nuevoValor)) {
+            mostrarError("Nombre invalido.", 25);
+            pausa();
+            return;
+        }
+        capitalizar(nuevoValor);
+        strcpy(alumnos[posAlumno].nombres, nuevoValor);
+    }
+
+    gotoxy(24, 19);
+    printf("Nuevo apellido (ENTER conserva): ");
+    leerTexto(nuevoValor, sizeof(nuevoValor), 59, 19);
+    if (strlen(nuevoValor) > 0) {
+        if (!validarNombre(nuevoValor)) {
+            mostrarError("Apellido invalido.", 25);
+            pausa();
+            return;
+        }
+        capitalizar(nuevoValor);
+        strcpy(alumnos[posAlumno].apellidos, nuevoValor);
+    }
+
+    materias[posMateria].actaGenerada = 0;
+    guardarDatos();
+    mostrarExito("Datos del alumno actualizados.", 25);
+    pausa();
+}
+
+void docenteRetirarAlumno(void) {
+    int materiaId;
+    int posMateria;
+    int posAlumno;
+    char cedula[20];
+
+    materiaId = elegirMateriaDelDocente();
+    if (materiaId < 0) return;
+    posMateria = buscarMateriaPorId(materiaId);
+
+    pantallaBase("RETIRAR ALUMNO");
+    dibujarCuadro(22, 9, 76, 12);
+    gotoxy(28, 11);
+    printf("Materia: %s", materias[posMateria].nombre);
+    gotoxy(28, 13);
+    printf("Cedula del alumno: ");
+    leerTexto(cedula, sizeof(cedula), 50, 13);
+
+    posAlumno = buscarAlumnoPorCedulaMateria(cedula, materiaId);
+    if (posAlumno < 0) {
+        mostrarError("Alumno no encontrado.", 24);
+        pausa();
+        return;
+    }
+
+    alumnos[posAlumno].retirado = 1;
+    materias[posMateria].actaGenerada = 0;
+    guardarDatos();
+    mostrarExito("Alumno marcado como retirado.", 24);
     pausa();
 }
 
@@ -1171,11 +1055,14 @@ void docentePlanEvaluacion(void) {
     int posMateria;
     int i, j;
     int hayNotas = 0;
+    int cantidad;
     float suma = 0.0f;
     float diferencia;
     char nombreEval[30];
+    char tipoEval[30];
     float pesoEval[MAX_EVALS];
     char nombresEval[MAX_EVALS][30];
+    char tiposEval[MAX_EVALS][30];
 
     materiaId = elegirMateriaDelDocente();
     if (materiaId < 0) return;
@@ -1189,7 +1076,7 @@ void docentePlanEvaluacion(void) {
         }
     }
 
-    pantallaBase("PLAN DE EVALUACION");
+    pantallaBase("PLAN DE ESTUDIO");
     dibujarCuadro(15, 8, 90, 17);
     gotoxy(22, 10);
     printf("Materia: %s", materias[posMateria].nombre);
@@ -1199,32 +1086,56 @@ void docentePlanEvaluacion(void) {
         printf("El plan no se puede editar porque ya existen notas cargadas.");
         gotoxy(22, 14);
         printf("Plan actual:");
-        for (i = 0; i < MAX_EVALS; i++) {
+        cantidad = materias[posMateria].totalEvaluaciones;
+        if (cantidad <= 0 || cantidad > MAX_EVALS) cantidad = 3;
+        for (i = 0; i < cantidad; i++) {
             gotoxy(24, 16 + i);
-            printf("%d. %-20s %.2f%%", i + 1, materias[posMateria].evalNombres[i], materias[posMateria].ponderaciones[i]);
+            printf("%d. %-18s %-14s %.2f%%",
+                   i + 1,
+                   materias[posMateria].evalNombres[i],
+                   materias[posMateria].evalTipos[i],
+                   materias[posMateria].ponderaciones[i]);
         }
         pausa();
         return;
     }
 
     gotoxy(22, 12);
-    printf("Configure 3 evaluaciones. La suma debe ser 100%%.");
-    for (i = 0; i < MAX_EVALS; i++) {
-        gotoxy(22, 15 + i * 2);
+    printf("Cantidad de evaluaciones (1-%d): ", MAX_EVALS);
+    cantidad = leerEntero(57, 12);
+    if (cantidad < 1 || cantidad > MAX_EVALS) {
+        mostrarError("Cantidad de evaluaciones invalida.", 25);
+        pausa();
+        return;
+    }
+
+    gotoxy(22, 14);
+    printf("Nombre, tipo y ponderacion. La suma debe ser 100%%.");
+    for (i = 0; i < cantidad; i++) {
+        gotoxy(22, 16 + i * 2);
         printf("Nombre eval %d: ", i + 1);
-        leerTexto(nombreEval, sizeof(nombreEval), 40, 15 + i * 2);
+        leerTexto(nombreEval, sizeof(nombreEval), 38, 16 + i * 2);
         if (strlen(nombreEval) == 0) {
             snprintf(nombreEval, sizeof(nombreEval), "Evaluacion %d", i + 1);
         }
-        gotoxy(70, 15 + i * 2);
+        gotoxy(52, 16 + i * 2);
+        printf("Tipo: ");
+        leerTexto(tipoEval, sizeof(tipoEval), 58, 16 + i * 2);
+        if (strlen(tipoEval) == 0) {
+            strcpy(tipoEval, "General");
+        }
+        gotoxy(77, 16 + i * 2);
         printf("Peso: ");
-        pesoEval[i] = leerFloat(76, 15 + i * 2);
+        pesoEval[i] = leerFloat(83, 16 + i * 2);
         if (pesoEval[i] <= 0.0f) {
             mostrarError("Cada ponderacion debe ser mayor que cero.", 25);
             pausa();
             return;
         }
+        capitalizar(nombreEval);
+        capitalizar(tipoEval);
         strcpy(nombresEval[i], nombreEval);
+        strcpy(tiposEval[i], tipoEval);
         suma += pesoEval[i];
     }
 
@@ -1237,12 +1148,20 @@ void docentePlanEvaluacion(void) {
     }
 
     for (i = 0; i < MAX_EVALS; i++) {
-        strcpy(materias[posMateria].evalNombres[i], nombresEval[i]);
-        materias[posMateria].ponderaciones[i] = pesoEval[i];
+        if (i < cantidad) {
+            strcpy(materias[posMateria].evalNombres[i], nombresEval[i]);
+            strcpy(materias[posMateria].evalTipos[i], tiposEval[i]);
+            materias[posMateria].ponderaciones[i] = pesoEval[i];
+        } else {
+            materias[posMateria].evalNombres[i][0] = '\0';
+            materias[posMateria].evalTipos[i][0] = '\0';
+            materias[posMateria].ponderaciones[i] = 0.0f;
+        }
     }
+    materias[posMateria].totalEvaluaciones = cantidad;
 
     guardarDatos();
-    mostrarExito("Plan de evaluacion guardado correctamente.", 25);
+    mostrarExito("Plan de estudio guardado correctamente.", 25);
     pausa();
 }
 
@@ -1251,12 +1170,15 @@ void docenteCargarNotas(void) {
     int posMateria;
     int posAlumno;
     int i;
+    int totalEvaluaciones;
     char cedula[20];
     float nota;
 
     materiaId = elegirMateriaDelDocente();
     if (materiaId < 0) return;
     posMateria = buscarMateriaPorId(materiaId);
+    totalEvaluaciones = materias[posMateria].totalEvaluaciones;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
 
     pantallaBase("CARGA DE NOTAS");
     dibujarCuadro(15, 8, 90, 17);
@@ -1280,10 +1202,14 @@ void docenteCargarNotas(void) {
 
     gotoxy(22, 14);
     printf("Alumno: %s %s", alumnos[posAlumno].nombres, alumnos[posAlumno].apellidos);
-    for (i = 0; i < MAX_EVALS; i++) {
+    for (i = 0; i < totalEvaluaciones; i++) {
         gotoxy(22, 16 + i * 2);
-        printf("%s (%.0f%%) nota 0-20: ", materias[posMateria].evalNombres[i], materias[posMateria].ponderaciones[i]);
-        nota = leerFloat(55, 16 + i * 2);
+        printf("E%d %-18.18s %-12.12s %.0f%% nota 0-20: ",
+               i + 1,
+               materias[posMateria].evalNombres[i],
+               materias[posMateria].evalTipos[i],
+               materias[posMateria].ponderaciones[i]);
+        nota = leerFloat(88, 16 + i * 2);
         if (nota < 0.0f || nota > 20.0f) {
             mostrarError("La nota debe estar entre 0 y 20.", 25);
             pausa();
@@ -1291,6 +1217,10 @@ void docenteCargarNotas(void) {
         }
         alumnos[posAlumno].notas[i] = nota;
         alumnos[posAlumno].tieneNotas[i] = 1;
+    }
+    for (i = totalEvaluaciones; i < MAX_EVALS; i++) {
+        alumnos[posAlumno].notas[i] = 0.0f;
+        alumnos[posAlumno].tieneNotas[i] = 0;
     }
 
     materias[posMateria].actaGenerada = 0;
@@ -1313,8 +1243,9 @@ void docenteGenerarActa(void) {
 
 void verActaMateria(int materiaId, int modoAdmin) {
     int posMateria = buscarMateriaPorId(materiaId);
-    int i;
-    int y = 13;
+    int i, j;
+    int totalEvaluaciones;
+    int y = 15;
     int completo;
     float definitiva;
     char docente[120];
@@ -1325,39 +1256,53 @@ void verActaMateria(int materiaId, int modoAdmin) {
         return;
     }
 
+    (void) modoAdmin;
+    totalEvaluaciones = materias[posMateria].totalEvaluaciones;
+    if (totalEvaluaciones <= 0 || totalEvaluaciones > MAX_EVALS) totalEvaluaciones = 3;
+
     nombreDocente(materias[posMateria].docenteId, docente);
-    pantallaBase(modoAdmin ? "ACTA SUPERVISADA POR ADMIN" : "ACTA FINAL DE MATERIA");
+    pantallaBase("ACTA DE CALIFICACIONES");
     dibujarCuadro(4, 8, 112, 18);
     gotoxy(8, 9);
     printf("Materia: %s  Codigo: %s  Periodo: %s", materias[posMateria].nombre, materias[posMateria].codigo, materias[posMateria].periodo);
     gotoxy(8, 10);
-    printf("Docente: %s", docente);
-    gotoxy(8, 12);
-    printf("CEDULA       ALUMNO                         %-8s %-8s %-8s DEF.     CONDICION",
-           materias[posMateria].evalNombres[0],
-           materias[posMateria].evalNombres[1],
-           materias[posMateria].evalNombres[2]);
+    printf("Usuario: %s", docente);
+    gotoxy(8, 11);
+    printf("Plan:");
+    for (j = 0; j < totalEvaluaciones; j++) {
+        gotoxy(14 + (j % 3) * 33, 11 + (j / 3));
+        printf("E%d %.10s/%.8s %.0f%%",
+               j + 1,
+               materias[posMateria].evalNombres[j],
+               materias[posMateria].evalTipos[j],
+               materias[posMateria].ponderaciones[j]);
+    }
+    gotoxy(8, 14);
+    printf("CEDULA       NOMBRES          APELLIDOS        ");
+    for (j = 0; j < totalEvaluaciones; j++) {
+        printf("E%-2d    ", j + 1);
+    }
+    printf("PROM.   MENSAJE");
 
     for (i = 0; i < totalAlumnos && y < 25; i++) {
         if (alumnos[i].materiaId == materiaId) {
             definitiva = calcularDefinitivaAlumno(&alumnos[i], &materias[posMateria], &completo);
-            gotoxy(8, y++);
-            printf("%-12s %-30s %7.2f  %7.2f  %7.2f  %6s   %s",
+            gotoxy(8, y);
+            printf("%-12s %-16.16s %-16.16s",
                    alumnos[i].cedula,
-                   alumnos[i].apellidos,
-                   alumnos[i].tieneNotas[0] ? alumnos[i].notas[0] : 0.0f,
-                   alumnos[i].tieneNotas[1] ? alumnos[i].notas[1] : 0.0f,
-                   alumnos[i].tieneNotas[2] ? alumnos[i].notas[2] : 0.0f,
-                   completo ? "" : "Pend.",
-                   condicionAlumno(&alumnos[i], &materias[posMateria]));
-            if (completo) {
-                gotoxy(83, y - 1);
-                printf("%6.2f", definitiva);
+                   alumnos[i].nombres,
+                   alumnos[i].apellidos);
+            for (j = 0; j < totalEvaluaciones; j++) {
+                if (alumnos[i].tieneNotas[j]) printf(" %5.2f ", alumnos[i].notas[j]);
+                else printf("  0.00 ");
             }
+            (void) completo;
+            printf(" %6.2f %s", definitiva, condicionAlumno(&alumnos[i], &materias[posMateria]));
+            y++;
         }
     }
 
-    if (y == 13) {
+    if (y == 15) {
         mostrarError("No hay alumnos para esta acta.", 18);
     }
 

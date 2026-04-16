@@ -43,40 +43,33 @@ O usa:
 ## Usuarios
 
 ```text
-Administrador:
-admin / admin123
-
-Docente:
-El usuario y la clave los crea el administrador desde su panel.
+Usuario:
+Al iniciar por primera vez, el sistema pide crear un usuario con nombre,
+apellido, usuario, contrasena y materia a impartir.
 ```
 
 ## Que hace
 
 - Menu principal con flechas.
-- Login para administrador/director.
-- Login para docentes creados por el administrador.
-- El administrador registra docentes y decide usuario/clave.
-- El administrador registra materias.
-- El administrador asigna docentes por materia.
-- El administrador supervisa actas.
-- El administrador ve reportes globales.
-- Cada docente ve solo sus materias asignadas.
-- Cada docente registra alumnos por materia.
-- Cada docente lista sus alumnos.
-- Cada docente configura el plan de evaluacion.
-- Cada docente carga o corrige notas.
-- Cada docente genera actas finales.
+- Login para usuarios creados al inicio o desde el menu principal.
+- Cada usuario tiene una materia a impartir.
+- Cada usuario registra alumnos con nombres, apellidos y cedula.
+- Cada usuario puede editar alumnos o marcarlos como retirados.
+- Cada usuario configura el plan de estudio con nombre, tipo y ponderacion.
+- Las ponderaciones del plan deben sumar 100%.
+- Cada usuario carga o corrige notas.
+- Cada usuario genera actas finales con promedio y condicion.
 - Guardar datos en `siga_sencillo.dat`.
 
 ## Flujo recomendado
 
-1. Entrar como administrador con `admin / admin123`.
-2. Registrar uno o varios docentes.
-3. Crear las materias.
-4. Asignar cada materia a un docente.
-5. Cerrar sesion.
-6. Entrar como docente con el usuario y clave creados por el administrador.
-7. Registrar alumnos, configurar evaluaciones, cargar notas y generar actas.
+1. Ejecutar el programa.
+2. Crear el primer usuario cuando el sistema lo solicite.
+3. Iniciar sesion con ese usuario y contrasena.
+4. Registrar alumnos.
+5. Configurar el plan de estudio.
+6. Cargar notas.
+7. Ver el acta de calificaciones.
 
 ## Nota
 
